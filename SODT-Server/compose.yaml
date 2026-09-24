@@ -1,0 +1,7 @@
+﻿services:
+  sodt-server:
+    image: sodt-server
+    build:
+      context: .
+      dockerfile: Dockerfile
+

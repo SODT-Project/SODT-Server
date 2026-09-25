@@ -2,10 +2,10 @@ using System.Security.Cryptography;
 
 namespace SODT_Server
 {
-	public abstract class RSAEncryption : RSA
+	public abstract class RsaEncryption : RSA
 	{
-		private const string privateKeyPath = "certs/private.key";
-		private const string publicKeyPath = "certs/public.key";
+		private const string PrivateKeyPath = "certs/private.key";
+		private const string PublicKeyPath = "certs/public.key";
 
 		/// <summary>
 		/// Loads server's RSA key pair from files or generates new ones if they don't exist.
@@ -14,7 +14,7 @@ namespace SODT_Server
 		{
 			GenerateKeys();
 			RSA enc = RSA.Create();
-			enc.ImportFromPem(File.ReadAllText(privateKeyPath));
+			enc.ImportFromPem(File.ReadAllText(PrivateKeyPath));
 			return enc;
 		}
 		/// <summary>
@@ -30,12 +30,12 @@ namespace SODT_Server
 			}
 
 			// Check if the private key and public key files exist, and generate new ones if they don't
-			if (forceRegeneration || !File.Exists(privateKeyPath) || !File.Exists(publicKeyPath))
+			if (forceRegeneration || !File.Exists(PrivateKeyPath) || !File.Exists(PublicKeyPath))
 			{
-				File.WriteAllText(privateKeyPath, enc.ExportRSAPrivateKeyPem());
+				File.WriteAllText(PrivateKeyPath, enc.ExportRSAPrivateKeyPem());
 
 				// Write the public key to a file in PEM format
-				File.WriteAllText(publicKeyPath, enc.ExportRSAPublicKeyPem());
+				File.WriteAllText(PublicKeyPath, enc.ExportRSAPublicKeyPem());
 			}
 		}
 

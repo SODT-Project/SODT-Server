@@ -25,7 +25,7 @@ namespace SODT_Server
 		/// <summary>
 		/// Server's RSA encryption key pair.
 		/// </summary>
-		private readonly RSA encryption = RSAEncryption.Create();
+		private readonly RSA encryption = RsaEncryption.Create();
 
 		/// <summary>
 		/// Buffer size for incoming data.

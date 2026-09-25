@@ -40,14 +40,14 @@ namespace SODT_Server
 			if (forceRegeneration)
 			{
 				SmartConsole.WriteLine("Force Key Regeneration");
-				RSAEncryption.GenerateKeys(forceRegeneration);
+				RsaEncryption.GenerateKeys(forceRegeneration);
 				SmartConsole.WriteLine("New Keys generated. Restart the Server to use them.");
 				return;
 			}
 			
-			// Start the TCP server asynchronously on the loopback address and port 25565.
+			// Start the TCP server asynchronously on the loopback address and port 45645.
 			var server = new AsyncTcpServer();
-			await server.StartAsync(IPAddress.Any, 25565);
+			await server.StartAsync(IPAddress.Any, 45645);
 		}
 	}
 }

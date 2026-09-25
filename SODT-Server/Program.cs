@@ -1,6 +1,5 @@
 using System.Net;
 
-
 namespace SODT_Server
 {
 	public static class SmartConsole
@@ -33,13 +32,21 @@ namespace SODT_Server
 		/// </summary>
 		public static async Task Main(string[] args)
 		{
+			// Enable logging if the 'log' argument is passed.
+			SmartConsole.Log = args.Contains("log");
+			
 			// Generate RSA key pair if they don't already exist or if the 'force-gen' argument is passed.
-			bool forceRegeneration = args != null && args.Contains("force-gen");
-			SmartConsole.Log = args != null && args.Contains("log");
-			RSAEncryption.GenerateKeys(forceRegeneration);
-			// Create a new instance of the AsyncTcpServer class.
-			var server = new AsyncTcpServer();
+			bool forceRegeneration = args.Contains("force-gen");
+			if (forceRegeneration)
+			{
+				SmartConsole.WriteLine("Force Key Regeneration");
+				RSAEncryption.GenerateKeys(forceRegeneration);
+				SmartConsole.WriteLine("New Keys generated. Restart the Server to use them.");
+				return;
+			}
+			
 			// Start the TCP server asynchronously on the loopback address and port 25565.
+			var server = new AsyncTcpServer();
 			await server.StartAsync(IPAddress.Any, 25565);
 		}
 	}

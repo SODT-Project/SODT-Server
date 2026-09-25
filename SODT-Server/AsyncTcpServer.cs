@@ -10,7 +10,7 @@ namespace SODT_Server
 	/// </summary>
 	public class AsyncTcpServer
 	{
-		private const byte serverId = 1;
+		private const byte ServerId = 1;
 
 		/// <summary>
 		/// A dictionary of connected clients, keyed by their unique IDs.
@@ -30,7 +30,7 @@ namespace SODT_Server
 		/// <summary>
 		/// Buffer size for incoming data.
 		/// </summary>
-		private const int bufferSize = 4096;
+		private const int BufferSize = 4096;
 
 		/// <summary>
 		/// Starts the TCP server on the specified IP address and port.
@@ -98,10 +98,10 @@ namespace SODT_Server
 		/// <summary>
 		/// Handles a single incoming client connection asynchronously until the client disconnects.
 		/// </summary>
-		/// <param name="client">The TcpClient instance representing the connected client.</param>
+		/// <param name="clientId">The ID of the connected client.</param>
 		private async Task HandleClientAsync(byte clientId)
 		{
-			byte[] buffer = new byte[bufferSize];
+			byte[] buffer = new byte[BufferSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
 
@@ -109,7 +109,7 @@ namespace SODT_Server
 			while (client != null && client.Connected)
 			{
 				//wait unitil bufferSize bytes are received
-				while (stream.Socket.Available < bufferSize)
+				while (stream.Socket.Available < BufferSize)
 				{
 					//delay to reduce cpu usage
 					await Task.Delay(50);
@@ -129,7 +129,7 @@ namespace SODT_Server
 				byte id = buffer[0];
 
 				// If the message is meant for the server, handle it accordingly.
-				if (id == serverId)
+				if (id == ServerId)
 				{
 					// remove target and source Id bytes
 					ArraySegment<byte> messageBuffer = new(buffer, 2, bytesRead - 2);
@@ -254,7 +254,7 @@ namespace SODT_Server
 		{
 			if (clientServerSessionKeys.TryGetValue(targetId, out Aes? encryption) && encryption != null)
 			{
-				byte[] enc = [targetId, serverId, .. encryption.EncryptCfb(baseMessage.ToBytes(), encryption.IV)];
+				byte[] enc = [targetId, ServerId, .. encryption.EncryptCfb(baseMessage.ToBytes(), encryption.IV)];
 				await SendToClient(targetId, enc);
 			}
 			else
@@ -295,7 +295,6 @@ namespace SODT_Server
 		/// This method redirects the key to the target client.
 		/// The key exchange request was decrypted by the server and will be encrypted by the server before sending it to the target client.
 		/// </summary>
-		/// <param name="clientId">Client who sent the keyExchange request</param>
 		/// <param name="keyExchange">keyExchange message</param>
 		/// <returns></returns>
 		private async Task<bool> HandleExchange(KeyExchange keyExchange)

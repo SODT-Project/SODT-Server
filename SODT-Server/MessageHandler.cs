@@ -6,7 +6,7 @@ namespace SODT_Server
 	/// <summary>
 	/// Represents a message handler class that can parse and send messages over a network stream.
 	/// </summary>
-	public class MessageHandler
+	public class MessageHandler //TODO make this static
 	{
 
 		/// <summary>

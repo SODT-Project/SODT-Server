@@ -20,17 +20,17 @@ namespace SODT_Server
 		/// <summary>
 		/// A dictionary of session keys for each client, keyed by their unique IDs.
 		/// </summary>
-		private readonly Dictionary<int, Aes> clientServerSessionKeys = new();
+		private readonly Dictionary<int, AesGcm> clientServerSessionKeys = new();
 
 		/// <summary>
 		/// Server's RSA encryption key pair.
 		/// </summary>
-		private readonly RSA encryption = RsaEncryption.Create();
+		private readonly RSA serverRsaEncryption = RsaEncryption.Create();
 
 		/// <summary>
 		/// Buffer size for incoming data.
 		/// </summary>
-		private const int BufferSize = 4096;
+		private const int BufferSize = MessageHelper.FullMessageSize;
 
 		/// <summary>
 		/// Starts the TCP server on the specified IP address and port.
@@ -124,9 +124,7 @@ namespace SODT_Server
 				// If the message is meant for the server, handle it accordingly.
 				if (id == ServerId)
 				{
-					// remove target and source Id bytes
-					ArraySegment<byte> messageBuffer = new(buffer, 2, bytesRead - 2);
-					var message = Decrypt(clientId, messageBuffer);
+					var message = Decrypt(clientId, buffer);
 					await HandleServerMessage(message, clientId);
 					continue;
 				}
@@ -143,29 +141,27 @@ namespace SODT_Server
 		/// <param name="clientId"> The ID of the client that sent the message.</param>
 		/// <param name="message"> The encrypted message to decrypt. Without target and source Id bytes.</param>
 		/// <returns>The decrypted message as an <see cref="IBaseMessage"/> object or <see langword="null"/> if decryption fails.</returns>
-		private IBaseMessage? Decrypt(byte clientId, ArraySegment<byte> message)
+		private IBaseMessage? Decrypt(byte clientId, ReadOnlySpan<byte> message)
 		{
 			//decrypt message
-			byte[] decryptedMessage;
-			//special case for discorvery (aka if no session key is null)
-			if (!clientServerSessionKeys.TryGetValue(clientId, out Aes? aes) || aes == null)
+			byte[] decryptedMessage = new byte[MessageHelper.MessageContentSize];
+			//special case for discovery (aka if no session key or aes is null)
+			if (!clientServerSessionKeys.TryGetValue(clientId, out AesGcm? aes) || aes == null)
 			{
 				//decrypt
 				try
 				{
-					decryptedMessage = encryption.Decrypt(message[0..512], RSAEncryptionPadding.Pkcs1);
-
+					decryptedMessage = serverRsaEncryption.Decrypt(message[2..514], RSAEncryptionPadding.Pkcs1);
 				}
 				catch
 				{
 					SmartConsole.WriteLine($"Discovery failed for client {clientId}.");
 					return null;
 				}
-
 			}
 			else
 			{
-				decryptedMessage = aes.DecryptCfb(message, aes.IV); //decrypt with session key
+				EncryptionHandler.DecryptAesGcm(aes, message, decryptedMessage);
 			}
 			return MessageHandler.ParseDecryptedMessage(decryptedMessage);
 		}
@@ -245,10 +241,14 @@ namespace SODT_Server
 		/// <returns></returns>
 		private async Task SendToClientEncrypted(byte targetId, IBaseMessage baseMessage)
 		{
-			if (clientServerSessionKeys.TryGetValue(targetId, out Aes? encryption) && encryption != null)
+			if (clientServerSessionKeys.TryGetValue(targetId, out AesGcm? encryption) && encryption != null)
 			{
-				byte[] enc = [targetId, ServerId, .. encryption.EncryptCfb(baseMessage.ToBytes(), encryption.IV)];
-				await SendToClient(targetId, enc);
+				// encrypt
+				byte[] finalMessage = new byte[MessageHelper.MessageWithHeaders];
+				EncryptionHandler.EncryptAesGcm(encryption, baseMessage, finalMessage);
+				
+				// send 
+				await SendToClient(targetId, finalMessage);
 			}
 			else
 			{
@@ -272,9 +272,7 @@ namespace SODT_Server
 			//add client to clients dictionary already done in StartAsync
 
 			//add encryption key to keys dictionary
-			var aes = Aes.Create();
-			aes.Key = discovery.Key;
-			aes.IV = discovery.Iv;
+			var aes = new AesGcm(discovery.Key, MessageHelper.TagSize);
 			clientServerSessionKeys.Add(clientId, aes);
 
 			//send client verification message with their targetId
@@ -310,7 +308,7 @@ namespace SODT_Server
 		private async Task DisconnectClient(byte clientId, Disconnect disconnect)
 		{
 			//Dispose session key
-			if (clientServerSessionKeys.TryGetValue(clientId, out Aes? aes))
+			if (clientServerSessionKeys.TryGetValue(clientId, out AesGcm? aes))
 				aes.Dispose();
 			//dispose client
 			if (clients.TryGetValue(clientId, out TcpClient? client))

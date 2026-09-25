@@ -40,4 +40,30 @@ namespace SODT_Server
 		}
 
 	}
+
+	public static class EncryptionHandler
+	{
+		public const int NonceSize = 12;
+		public const int TagSize = 16;
+		
+		public static void EncryptAesGcm(AesGcm aes, IBaseMessage baseMessage, Span<byte> finalMessage)
+		{
+			Span<byte> nonce = finalMessage.Slice(MessageHelper.IdSize, MessageHelper.NonceSize);
+			Span<byte> tag = finalMessage.Slice(MessageHelper.IdSize + MessageHelper.NonceSize, MessageHelper.TagSize);
+			Span<byte> ciphertext = finalMessage[MessageHelper.HeaderSize..];
+				
+			// handle encryption
+			RandomNumberGenerator.Fill(nonce);
+			aes.Encrypt(nonce, baseMessage.ToBytes(), ciphertext, tag);
+		}
+
+		public static void DecryptAesGcm(AesGcm aes, ReadOnlySpan<byte> encryptedMessage, Span<byte> decryptedMessage)
+		{
+			aes.Decrypt(
+				encryptedMessage.Slice(MessageHelper.IdSize, MessageHelper.NonceSize),
+				encryptedMessage[MessageHelper.HeaderSize..],
+				encryptedMessage.Slice(MessageHelper.IdSize + MessageHelper.NonceSize, MessageHelper.TagSize),
+				decryptedMessage);
+		}
+	}
 }

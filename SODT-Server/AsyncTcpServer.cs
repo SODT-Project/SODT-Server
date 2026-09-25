@@ -56,34 +56,27 @@ namespace SODT_Server
 				{
 					var client = await listener.AcceptTcpClientAsync();
 
+					// handle full server:
+					while (clients.Count >= byte.MaxValue - 1)
+					{
+						SmartConsole.WriteLine("Server is full. Blocking new connections until a client disconnects.");
+						await Task.Delay(1000);
+					}
+					// Find next available client ID (2-255) for the new client.
+					// This loop will always find an available ID because the server is not full.
+					for (byte i = 2; i < byte.MaxValue; i++)
+					{
+						if (!clients.ContainsKey(i))
+						{
+							clientId = i;
+							break;
+						}
+					}
+					
 					// Add the new client to the dictionary of connected clients.
 					clients[clientId] = client;
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
-					_ = HandleClientAsync(clientId); //fire and forget; client handels itself
-
-					//set client targetId for next client
-					//main problem: if targetId is reused directly, clients might think they are connected to the wrong/old client
-					//solution: 
-					// first try default increment
-					clientId++;
-					// if not possible (because of max value or already used targetId), search for free targetId
-					if (clientId >= byte.MaxValue || clients.ContainsKey(clientId))
-					{
-						// block listener.Accept() until a free targetId is found
-						while (clients.Count >= byte.MaxValue - 1)
-						{
-							SmartConsole.WriteLine("Server is full");
-							await Task.Delay(1000);
-						}
-						//search for free targetId
-						for (clientId = 2; clientId < byte.MaxValue; clientId++)
-						{
-							if (!clients.ContainsKey(clientId))
-							{
-								break;
-							}
-						}
-					}
+					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
 				}
 				catch (Exception e)
 				{

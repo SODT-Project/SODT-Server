@@ -14,11 +14,11 @@ namespace SODT_Server
 		/// </summary>
 		/// <param name="messageWithContentSize"> Decrypted message packet received from the client.</param>
 		/// <returns> The parsed <see cref="IBaseMessage"/> message object or <see langword="null"/> if parsing fails.</returns>
-		public static IBaseMessage? ParseDecryptedMessage(byte[] messageWithContentSize)
+		public static IBaseMessage? ParseDecryptedMessage(byte[] messageWithContentSize) // TODO make this better type like Span
 		{
 			try
 			{
-				ushort length = BitConverter.ToUInt16(messageWithContentSize[0..2], 0);
+				ushort length = BitConverter.ToUInt16(messageWithContentSize[0..2], 0); // TODO remove magic numbers
 				string messageJson = Encoding.UTF8.GetString(messageWithContentSize[2..(length + 2)]);
 				return HandleType(messageJson);
 			}

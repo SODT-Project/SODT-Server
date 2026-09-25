@@ -43,17 +43,18 @@ namespace SODT_Server
 
 	public static class EncryptionHandler
 	{
-		public const int NonceSize = 12;
-		public const int TagSize = 16;
-		
 		public static void EncryptAesGcm(AesGcm aes, IBaseMessage baseMessage, Span<byte> finalMessage)
 		{
-			Span<byte> nonce = finalMessage.Slice(MessageHelper.IdSize, MessageHelper.NonceSize);
-			Span<byte> tag = finalMessage.Slice(MessageHelper.IdSize + MessageHelper.NonceSize, MessageHelper.TagSize);
-			Span<byte> ciphertext = finalMessage[MessageHelper.HeaderSize..];
+			// slice the final message into its components
+			// because of Span<byte> the slices are just references to the original array. This eliminates memory allocations and copying.
+			Span<byte> nonce = finalMessage.Slice(MessageHelper.IdSize, MessageHelper.NonceSize); // nonce starts after the id
+			Span<byte> tag = finalMessage.Slice(MessageHelper.IdSize + MessageHelper.NonceSize, MessageHelper.TagSize); // tag starts after the id and nonce
+			Span<byte> ciphertext = finalMessage[MessageHelper.HeaderSizeWithoutContentLengthSize..]; // ciphertext starts after the header (id + nonce + tag) and goes to the end of the message
 				
 			// handle encryption
 			RandomNumberGenerator.Fill(nonce);
+			
+			// encrypt the base message and write the ciphertext and tag inside the final message
 			aes.Encrypt(nonce, baseMessage.ToBytes(), ciphertext, tag);
 		}
 
@@ -61,7 +62,7 @@ namespace SODT_Server
 		{
 			aes.Decrypt(
 				encryptedMessage.Slice(MessageHelper.IdSize, MessageHelper.NonceSize),
-				encryptedMessage[MessageHelper.HeaderSize..],
+				encryptedMessage[MessageHelper.HeaderSizeWithoutContentLengthSize..],
 				encryptedMessage.Slice(MessageHelper.IdSize + MessageHelper.NonceSize, MessageHelper.TagSize),
 				decryptedMessage);
 		}

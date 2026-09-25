@@ -144,7 +144,7 @@ namespace SODT_Server
 		private IBaseMessage? Decrypt(byte clientId, ReadOnlySpan<byte> message)
 		{
 			//decrypt message
-			byte[] decryptedMessage = new byte[MessageHelper.MessageContentSize];
+			byte[] decryptedMessage = new byte[MessageHelper.MessageWithContentSize];
 			//special case for discovery (aka if no session key or aes is null)
 			if (!clientServerSessionKeys.TryGetValue(clientId, out AesGcm? aes) || aes == null)
 			{
@@ -243,8 +243,12 @@ namespace SODT_Server
 		{
 			if (clientServerSessionKeys.TryGetValue(targetId, out AesGcm? encryption) && encryption != null)
 			{
-				// encrypt
-				byte[] finalMessage = new byte[MessageHelper.MessageWithHeaders];
+				// create final message
+				byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
+				finalMessage[0] = ServerId;
+				finalMessage[1] = targetId;
+				
+				// insert encrypted message into final message
 				EncryptionHandler.EncryptAesGcm(encryption, baseMessage, finalMessage);
 				
 				// send 

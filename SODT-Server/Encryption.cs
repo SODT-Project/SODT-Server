@@ -7,6 +7,8 @@ namespace SODT_Server
 		private const string PrivateKeyPath = "certs/private.key";
 		private const string PublicKeyPath = "certs/public.key";
 
+		private const int RsaKeySizeBits = 4096;
+
 		/// <summary>
 		/// Loads server's RSA key pair from files or generates new ones if they don't exist.
 		/// </summary>
@@ -22,7 +24,7 @@ namespace SODT_Server
 		/// </summary>
 		public static void GenerateKeys(bool forceRegeneration = false)
 		{
-			RSA enc = RSA.Create(4096);
+			RSA enc = RSA.Create(RsaKeySizeBits);
 			// Create the 'certs' directory if it doesn't already exist
 			if (!Directory.Exists("certs"))
 			{

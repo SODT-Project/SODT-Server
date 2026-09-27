@@ -10,11 +10,11 @@ namespace SODT_Server.Tests
 			Assert.Equal(MessageHelper.MessageContentSize + MessageHelper.ContentLengthSize, bytes.Length);
 		}
 		[Fact]
-		public void MessageTypeCheck()
+		public void MessagePolyMorphismTest()
 		{
 			var clientList = ClientList.CreateRequest();
 			IBaseMessage genericMessage = clientList;
-			// TODO
+			Assert.Equal(genericMessage.ToJson(), clientList.ToJson());
 		}
 	}
 }

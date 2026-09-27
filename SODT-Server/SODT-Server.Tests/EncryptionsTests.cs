@@ -18,5 +18,16 @@ namespace SODT_Server.Tests
 			Assert.Equal(testMessage, resultMessage);
 
 		}
+
+		[Fact]
+		public void DecryptDeiscoveryTest()
+		{
+			var tmpkey = RandomNumberGenerator.GetBytes(32);
+			RSA rsa = RsaEncryption.Create();
+			var discovery = Discovery.CreateRequest(tmpkey);
+			var decBytes = rsa.Decrypt(discovery.ToEncryptedBytes(rsa)[0..512], RSAEncryptionPadding.OaepSHA384);
+			var decDiscorvery = (Discovery)MessageHandler.ParseDecryptedMessage(decBytes)!;
+			Assert.Equal(discovery.ToJson(), decDiscorvery.ToJson()); // use string for easy compare
+		}
 	}
 }

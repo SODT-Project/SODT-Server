@@ -158,9 +158,6 @@ namespace SODT_Server
 		[JsonPropertyName("key")]
 		public byte[]? Key { get; set; }
 
-		[JsonPropertyName("iv")]
-		public byte[]? Iv { get; set; }
-
 		/// <summary>
 		/// Contains the id of a client assigned by the server.
 		/// </summary>
@@ -171,23 +168,22 @@ namespace SODT_Server
 		/// </summary>
 		/// <param name="code"></param>
 		/// <param name="id">Contains the id of a client assigned by the server</param>
-		private Discovery(PacketCode code, byte assignedId, byte[]? key, byte[]? iv)
+		private Discovery(PacketCode code, byte assignedId, byte[]? key)
 		{
 			Uuid = new Random().Next();
 			Code = (int)code;
 			Type = "discovery";
 			Id = assignedId;
 			Key = key;
-			Iv = iv;
 		}
 
-		public static Discovery CreateRequest(byte[] key, byte[] iv, RSA serverPublicKey)
+		public static Discovery CreateRequest(byte[] key)
 		{
-			return new Discovery(PacketCode.Request, 0, key, iv);
+			return new Discovery(PacketCode.Request, 0, key);
 		}
 		public static Discovery CreateResponse(byte assignedId)
 		{
-			return new Discovery(PacketCode.Ok, assignedId, null, null);
+			return new Discovery(PacketCode.Ok, assignedId, null);
 		}
 		public string ToJson()
 		{
@@ -218,7 +214,7 @@ namespace SODT_Server
 			//contentLength is always 2 bytes because it's convertet to ushort
 			byte[] contentLength = BitConverter.GetBytes((ushort)content.Length);
 			//encrypt the content including the content length
-			byte[] rsaEncrypted = serverPublicKey.Encrypt([contentLength[0], contentLength[1], .. content], RSAEncryptionPadding.Pkcs1);
+			byte[] rsaEncrypted = serverPublicKey.Encrypt([contentLength[0], contentLength[1], .. content], RSAEncryptionPadding.OaepSHA384);
 			//resulting rsaEncrypted is always 512 bytes because of the 4096-bit RSA key encryption
 			byte[] bytes = new byte[MessageHelper.MessageWithHeaders];
 			//fill bytes with random data for obfuscation

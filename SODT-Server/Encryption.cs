@@ -38,7 +38,6 @@ namespace SODT_Server
 				File.WriteAllText(PublicKeyPath, enc.ExportRSAPublicKeyPem());
 			}
 		}
-
 	}
 
 	public static class EncryptionHandler

@@ -151,7 +151,7 @@ namespace SODT_Server
 				//decrypt
 				try
 				{
-					decryptedMessage = serverRsaEncryption.Decrypt(message[2..514], RSAEncryptionPadding.Pkcs1);
+					decryptedMessage = serverRsaEncryption.Decrypt(message[2..514], RSAEncryptionPadding.OaepSHA384);
 				}
 				catch
 				{
@@ -269,7 +269,7 @@ namespace SODT_Server
 		/// <returns></returns>
 		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
 		{
-			if (discovery.Key == null || discovery.Iv == null || discovery.Code != (int)PacketCode.Request)
+			if (discovery.Key == null || discovery.Code != (int)PacketCode.Request)
 			{
 				return false;
 			}

@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using SODT_Common;
 
 namespace SODT_Server
 {
@@ -38,7 +39,7 @@ namespace SODT_Server
 		{
 			return JsonSerializer.Deserialize<BaseMessage>(messageJson).Type switch
 			{
-				"discovery" => JsonSerializer.Deserialize<Discovery>(messageJson),
+				// "discovery" => JsonSerializer.Deserialize<Discovery>(messageJson), TODO fix
 				"exchange" => JsonSerializer.Deserialize<KeyExchange>(messageJson),
 				"disconnect" => JsonSerializer.Deserialize<Disconnect>(messageJson),
 				"clients" => JsonSerializer.Deserialize<ClientList>(messageJson),

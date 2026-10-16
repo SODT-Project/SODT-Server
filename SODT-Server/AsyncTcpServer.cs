@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using SODT_Common;
 
 
 namespace SODT_Server
@@ -20,12 +21,10 @@ namespace SODT_Server
 		/// <summary>
 		/// A dictionary of session keys for each client, keyed by their unique IDs.
 		/// </summary>
-		private readonly Dictionary<int, AesGcm> clientServerSessionKeys = new();
-
-		/// <summary>
-		/// Server's RSA encryption key pair.
-		/// </summary>
-		private readonly RSA serverRsaEncryption = RsaEncryption.Create();
+		private readonly Dictionary<byte, AesGcm> clientAesSessionKeys = new();
+		
+		private readonly Dictionary<byte, ECDiffieHellman> clientEcdhGenerators = new();
+		
 
 		/// <summary>
 		/// Buffer size for incoming data.
@@ -75,6 +74,8 @@ namespace SODT_Server
 					
 					// Add the new client to the dictionary of connected clients.
 					clients[clientId] = client;
+					// Create new ECDH generator for the client
+					clientEcdhGenerators[clientId] = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
 					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
 				}
@@ -144,14 +145,14 @@ namespace SODT_Server
 		private IBaseMessage? Decrypt(byte clientId, ReadOnlySpan<byte> message)
 		{
 			//decrypt message
-			byte[] decryptedMessage = new byte[MessageHelper.MessageWithContentSize];
+			byte[] decryptedMessage = new byte[MessageHelper.MessageWithContentSize];  // TODO use Span<byte> instead
 			//special case for discovery (aka if no session key or aes is null)
-			if (!clientServerSessionKeys.TryGetValue(clientId, out AesGcm? aes) || aes == null)
+			if (!clientAesSessionKeys.TryGetValue(clientId, out AesGcm? aes) || aes == null)
 			{
 				//decrypt
 				try
 				{
-					decryptedMessage = serverRsaEncryption.Decrypt(message[2..514], RSAEncryptionPadding.OaepSHA384);
+					decryptedMessage = message.ToArray()[2..];
 				}
 				catch
 				{
@@ -176,26 +177,19 @@ namespace SODT_Server
 		{
 			switch (message)
 			{
-				case Discovery discovery:
+				/*case Discovery discovery:
 					bool isDiscoverySuccessful = await HandleDiscovery(clientId, discovery);
 					if (isDiscoverySuccessful)
 						await SendListToAllClients();
 					else
 						await DisconnectClient(clientId, Disconnect.CreateRequest());
-					break;
+					break;*/
 				case ClientList clientList:
 					if (clientList.Code == (int)PacketCode.Request)
 						await SendListToAllClients();
 					break;
 				case KeyExchange keyExchange:
-					bool isExchangeSuccessful = await HandleExchange(keyExchange);
-					//send error message to all affected clients
-					if (!isExchangeSuccessful)
-					{
-						KeyExchange keyExchangeError = KeyExchange.CreateError(keyExchange);
-						await SendToClientEncrypted(keyExchange.SourceId, keyExchangeError);
-						await SendToClientEncrypted(keyExchange.TargetId, keyExchangeError);
-					}
+					await HandleExchange(keyExchange, clientId);
 					break;
 				case Disconnect disconnect:
 					await DisconnectClient(clientId, disconnect);
@@ -241,12 +235,12 @@ namespace SODT_Server
 		/// <returns></returns>
 		private async Task SendToClientEncrypted(byte targetId, IBaseMessage baseMessage)
 		{
-			if (clientServerSessionKeys.TryGetValue(targetId, out AesGcm? encryption) && encryption != null)
+			if (clientAesSessionKeys.TryGetValue(targetId, out AesGcm? encryption) && encryption != null)
 			{
 				// create final message
 				byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
-				finalMessage[0] = ServerId;
-				finalMessage[1] = targetId;
+				finalMessage[0] = targetId;
+				finalMessage[1] = ServerId;
 				
 				// insert encrypted message into final message
 				EncryptionHandler.EncryptAesGcm(encryption, baseMessage, finalMessage);
@@ -260,6 +254,20 @@ namespace SODT_Server
 				await DisconnectClient(targetId, Disconnect.CreateRequest());
 			}
 		}
+		
+		private async Task SendToClientUnEncrypted(byte targetId, IBaseMessage baseMessage)
+		{
+			// create final message
+			byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
+			finalMessage[0] = targetId;
+			finalMessage[1] = ServerId;
+			
+			// insert unencrypted message into final message
+			Array.Copy(baseMessage.ToBytes(), 0, finalMessage, MessageHelper.HeaderSizeWithoutContentLengthSize, MessageHelper.MessageWithContentSize); // TODO fix
+			
+			// send 
+			await SendToClient(targetId, finalMessage);
+		}
 
 		/// <summary>
 		/// Handles a discovery message, including generating a response with encrypted data.
@@ -267,7 +275,7 @@ namespace SODT_Server
 		/// <param name="clientId">Client Id assigned by server.</param>
 		/// <param name="discovery">Clients discovery request.</param>
 		/// <returns></returns>
-		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
+		/*private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
 		{
 			if (discovery.Key == null || discovery.Code != (int)PacketCode.Request)
 			{
@@ -277,12 +285,12 @@ namespace SODT_Server
 
 			//add encryption key to keys dictionary
 			var aes = new AesGcm(discovery.Key, MessageHelper.TagSize);
-			clientServerSessionKeys.Add(clientId, aes);
+			clientAesSessionKeys.Add(clientId, aes);
 
 			//send client verification message with their targetId
 			await SendToClientEncrypted(clientId, Discovery.CreateResponse(clientId));
 			return true;
-		}
+		}*/
 
 		/// <summary>
 		/// Handles a key exchange message.
@@ -291,15 +299,20 @@ namespace SODT_Server
 		/// The key exchange request was decrypted by the server and will be encrypted by the server before sending it to the target client.
 		/// </summary>
 		/// <param name="keyExchange">keyExchange message</param>
+		/// <param name="remoteId">The ID of the remote client</param>
 		/// <returns></returns>
-		private async Task<bool> HandleExchange(KeyExchange keyExchange)
+		private async Task<bool> HandleExchange(KeyExchange keyExchange, byte remoteId)
 		{
-			if (keyExchange.Key == null || !clientServerSessionKeys.ContainsKey(keyExchange.TargetId))
+			if (keyExchange.Key == null || keyExchange.Code != (int)PacketCode.Request || keyExchange.Certificate == null)
 			{
 				return false;
 			}
-			//redirect key to target client
-			await SendToClientEncrypted(keyExchange.TargetId, keyExchange);
+			
+			// generate and save aes session key for the remote client
+			clientAesSessionKeys[remoteId] = EncryptionHandler.GenerateSessionKey(clientEcdhGenerators[remoteId], keyExchange.Key);
+			
+			KeyExchange response = KeyExchange.Create(PacketCode.Ok, clientEcdhGenerators[remoteId].ExportSubjectPublicKeyInfo(), new byte[]{}, null); // TODO fix certificate handling
+			await SendToClientUnEncrypted(remoteId, response);
 			return true;
 		}
 
@@ -312,14 +325,14 @@ namespace SODT_Server
 		private async Task DisconnectClient(byte clientId, Disconnect disconnect)
 		{
 			//Dispose session key
-			if (clientServerSessionKeys.TryGetValue(clientId, out AesGcm? aes))
+			if (clientAesSessionKeys.TryGetValue(clientId, out AesGcm? aes))
 				aes.Dispose();
 			//dispose client
 			if (clients.TryGetValue(clientId, out TcpClient? client))
 				client.Dispose();
 			//remove client from dictionaries
 			_ = clients.Remove(clientId);
-			_ = clientServerSessionKeys.Remove(clientId);
+			_ = clientAesSessionKeys.Remove(clientId);
 			SmartConsole.WriteLine($"{clientId} disconnected from server.");
 		}
 

@@ -1,3 +1,5 @@
+using SODT_Common;
+
 namespace SODT_Server.Tests
 {
 	public class MessageTests

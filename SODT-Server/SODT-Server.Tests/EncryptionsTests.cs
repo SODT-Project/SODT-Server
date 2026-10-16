@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using SODT_Common;
 
 namespace SODT_Server.Tests
 {
@@ -19,7 +20,7 @@ namespace SODT_Server.Tests
 
 		}
 
-		[Fact]
+		/*[Fact]
 		public void DecryptDeiscoveryTest()
 		{
 			var tmpkey = RandomNumberGenerator.GetBytes(32);
@@ -28,6 +29,6 @@ namespace SODT_Server.Tests
 			var decBytes = rsa.Decrypt(discovery.ToEncryptedBytes(rsa)[0..512], RSAEncryptionPadding.OaepSHA384);
 			var decDiscorvery = (Discovery)MessageHandler.ParseDecryptedMessage(decBytes)!;
 			Assert.Equal(discovery.ToJson(), decDiscorvery.ToJson()); // use string for easy compare
-		}
+		}*/
 	}
 }

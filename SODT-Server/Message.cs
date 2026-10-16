@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SODT_Server
+namespace SODT_Common
 {
 	public enum PacketCode
 	{
@@ -140,91 +140,6 @@ namespace SODT_Server
 	}
 
 	/// <summary>
-	/// Represents a discovery message in the system. This struct inherits from BaseMessage and provides 
-	/// additional properties relevant to discovery operations.
-	/// </summary>
-	/// <remarks>This class is designed for use in scenarios where clients need to discover available services or nodes.</remarks>
-	public struct Discovery : IBaseMessage
-	{
-		[JsonPropertyName("uuid")]
-		public int Uuid { get; set; }
-
-		[JsonPropertyName("code")]
-		public int Code { get; set; }
-
-		[JsonPropertyName("type")]
-		public string Type { get; set; }
-
-		[JsonPropertyName("key")]
-		public byte[]? Key { get; set; }
-
-		/// <summary>
-		/// Contains the id of a client assigned by the server.
-		/// </summary>
-		[JsonPropertyName("id")]
-		public byte Id { get; set; }
-		/// <summary>
-		/// Generate a new discovery message with the specified properties and new UUID.
-		/// </summary>
-		/// <param name="code"></param>
-		/// <param name="id">Contains the id of a client assigned by the server</param>
-		private Discovery(PacketCode code, byte assignedId, byte[]? key)
-		{
-			Uuid = new Random().Next();
-			Code = (int)code;
-			Type = "discovery";
-			Id = assignedId;
-			Key = key;
-		}
-
-		public static Discovery CreateRequest(byte[] key)
-		{
-			return new Discovery(PacketCode.Request, 0, key);
-		}
-		public static Discovery CreateResponse(byte assignedId)
-		{
-			return new Discovery(PacketCode.Ok, assignedId, null);
-		}
-		public string ToJson()
-		{
-			return JsonSerializer.Serialize(this);
-		}
-		public byte[] ToBytes()
-		{
-			return MessageHelper.ToBytes(this);
-		}
-
-		/// <summary>
-		/// Converts the message to a byte array and encrypts it using the specified server public key.
-		/// Encrypted message has following structure:
-		/// <code>[ encLengthByte0, encLengthByte1, encByte0, encByte1, ..., encByte512, 0, 0, ..., 0]</code>
-		/// EncLength is the length of the encrypted message in two bytes.
-		/// </summary>
-		/// <param name="serverPublicKey"></param>
-		/// <returns></returns>
-		/// <exception cref="ArgumentException"></exception>
-		public byte[] ToEncryptedBytes(RSA serverPublicKey)
-		{
-			byte[] content = Encoding.UTF8.GetBytes(this.ToJson());
-			if (content.Length > MessageHelper.MessageContentSize)
-			{
-				throw new ArgumentException("Message size is too large");
-			}
-
-			//contentLength is always 2 bytes because it's convertet to ushort
-			byte[] contentLength = BitConverter.GetBytes((ushort)content.Length);
-			//encrypt the content including the content length
-			byte[] rsaEncrypted = serverPublicKey.Encrypt([contentLength[0], contentLength[1], .. content], RSAEncryptionPadding.OaepSHA384);
-			//resulting rsaEncrypted is always 512 bytes because of the 4096-bit RSA key encryption
-			byte[] bytes = new byte[MessageHelper.MessageWithHeaders];
-			//fill bytes with random data for obfuscation
-			new Random().NextBytes(bytes);
-			Array.Copy(rsaEncrypted, 0, bytes, 0, rsaEncrypted.Length);
-			return bytes;
-		}
-	}
-
-	/// <summary>
 	/// Represents a key exchange message in the system. This class inherits from BaseMessage and provides 
 	/// additional properties relevant to key exchange operations.
 	/// </summary>
@@ -261,18 +176,14 @@ namespace SODT_Server
 		/// </summary>
 		[JsonPropertyName("sessionHash")]
 		public byte[]? SessionHash { get; set; }
-
+		
 		/// <summary>
-		/// Gets or sets the source clientId for the key exchange.
+		/// Gets or sets the certificate of the client.
 		/// </summary>
-		[JsonPropertyName("sourceId")]
-		public byte SourceId { get; set; }
-
-		/// <summary>
-		/// Gets or sets the target clientId for the key exchange.
-		/// </summary>
-		[JsonPropertyName("targetId")]
-		public byte TargetId { get; set; }
+		[JsonPropertyName("certificate")]
+		public byte[] Certificate { get; set; }
+		
+		
 
 		/// <summary>
 		/// Generate a new key exchange message with the specified properties and new UUID.
@@ -280,27 +191,24 @@ namespace SODT_Server
 		/// <param name="code"></param>
 		/// <param name="key"></param>
 		/// <param name="sessionHash"></param>
-		/// <param name="targetId">Target clientId for the key exchange.</param>
-		private KeyExchange(PacketCode code, byte[] key, byte[]? sessionHash, byte sourceId, byte targetId)
+		/// <param name="certificate">The certificate of the client.</param>
+		private KeyExchange(PacketCode code, byte[] key, byte[] certificate, byte[]? sessionHash)
 		{
 			Uuid = new Random().Next();
 			Code = (int)code;
 			Type = "exchange";
 			Key = key;
 			SessionHash = sessionHash;
-			SourceId = sourceId;
-			TargetId = targetId;
+			Certificate = certificate;
 		}
 
-		public static KeyExchange Create(PacketCode code, byte[] key, byte[]? sessionHash, byte sourceId, byte targetId)
+		public static KeyExchange Create(PacketCode code, byte[] key, byte[] certificate, byte[]? sessionHash)
 		{
-			return new KeyExchange(code, key, sessionHash, sourceId, targetId);
+			return new KeyExchange(code, key, certificate, sessionHash);
 		}
 		public static KeyExchange CreateError(KeyExchange keyExchange)
 		{
 			keyExchange.Code = (int)PacketCode.Error;
-			//switch source and target id
-			(keyExchange.TargetId, keyExchange.SourceId) = (keyExchange.SourceId, keyExchange.TargetId);
 			return keyExchange;
 		}
 		public string ToJson()

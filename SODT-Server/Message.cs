@@ -138,7 +138,56 @@ namespace SODT_Common
 			return MessageHelper.ToBytes(this);
 		}
 	}
+	public struct Discovery : IBaseMessage
+	{
+		[JsonPropertyName("uuid")]
+		public int Uuid { get; set; }
 
+		[JsonPropertyName("code")]
+		public int Code { get; set; }
+
+		[JsonPropertyName("type")]
+		public string Type { get; set; }
+
+		[JsonPropertyName("id")]
+		public byte Id { get; set; }
+		
+		[JsonPropertyName("publicKey")]
+		public byte[] PublicKey { get; set; }
+
+		[JsonPropertyName("signature")]
+		public byte[]? Signature { get; set; }
+
+		private Discovery(PacketCode code, byte assignedId, byte[] publicKey, byte[]? signature)
+		{
+			Uuid = new Random().Next();
+			Code = (int)code;
+			Type = "discovery";
+			Id = assignedId;
+			this.PublicKey = publicKey;
+			Signature = signature;
+		}
+		public static Discovery CreateRequest(byte[] publicKeyClient)
+		{
+			return new Discovery(PacketCode.Request, 0, publicKeyClient, null);
+		}
+		
+		public static Discovery CreateResponse(byte assignedId, byte[] publicKeyServer, byte[] signature)
+		{
+			return new Discovery(PacketCode.Ok, assignedId, publicKeyServer, signature);
+		}
+
+		public string ToJson()
+		{
+			return JsonSerializer.Serialize(this);
+		}
+		
+		public byte[] ToBytes()
+		{
+			return MessageHelper.ToBytes(this);
+		}
+		
+	}
 	/// <summary>
 	/// Represents a key exchange message in the system. This class inherits from BaseMessage and provides 
 	/// additional properties relevant to key exchange operations.

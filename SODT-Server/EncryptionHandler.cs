@@ -38,7 +38,6 @@ namespace SODT_Common
 		/// </summary>
 		/// <param name="ownPublicKey"></param>
 		/// <param name="remotePublicKey"></param>
-		/// <param name="remoteId"></param>
 		/// <param name="privateSessionPasswordHash"></param>
 		/// <returns></returns>
 		/// 

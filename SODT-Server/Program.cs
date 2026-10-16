@@ -40,7 +40,7 @@ namespace SODT_Server
 			if (forceRegeneration)
 			{
 				SmartConsole.WriteLine("Force Key Regeneration");
-				RsaEncryption.GenerateKeys(forceRegeneration);
+				PersistentEcdsa.ForceRegenerateEcdsa();
 				SmartConsole.WriteLine("New Keys generated. Restart the Server to use them.");
 				return;
 			}

@@ -206,6 +206,29 @@ namespace SODT_Server
 			await SendToClient(targetId, finalMessage);
 		}
 		
+		private async Task SendToClientEncrypted(byte targetId, IBaseMessage baseMessage)
+		{
+			ReadOnlyMemory<byte> toSend;
+			
+			if (aesSessionKeys.TryGetValue(targetId, out AesGcm? aes))
+			{
+				byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
+				EncryptionHandler.EncryptAesGcm(aes, baseMessage, finalMessage);
+				finalMessage[0] = targetId;
+				finalMessage[1] = ServerId;
+				toSend = finalMessage;
+			}
+			else
+			{
+				//This case should never happen because the CLI always checks and requests, if neccessary, a key exchange before sending a message.
+				SmartConsole.WriteLine($"No key for target client {targetId} to encrypt with. How do you even get here?");
+				throw new InvalidOperationException("No key for target client to encrypt with.");
+			}
+
+
+			await SendToClient(targetId, toSend);
+		}
+		
 		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
 		{
 			// create new ecdh session key generator for this client

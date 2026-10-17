@@ -21,7 +21,7 @@ namespace SODT_Common
 
 		public static void DecryptAesGcm(AesGcm aes, ReadOnlySpan<byte> encryptedMessage, Span<byte> decryptedMessage)
 		{
-			if (encryptedMessage.Length != MessageHelper.FullMessageSize) // TODO copy this into check into server
+			if (encryptedMessage.Length != MessageHelper.FullMessageSize)
 			{
 				throw new InvalidOperationException("EncryptedMessage has wrong size");
 			}

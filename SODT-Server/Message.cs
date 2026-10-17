@@ -395,9 +395,7 @@ namespace SODT_Common
 		[JsonPropertyName("sourceId")]
 		public byte SourceId { get; set; }
 
-		public bool Compress { get; set; }
-
-		private Transfer(PacketCode code, string fileName, long fileSize, byte sourceId, bool compress)
+		private Transfer(PacketCode code, string fileName, long fileSize, byte sourceId)
 		{
 			Uuid = new Random().Next();
 			Code = (int)code;
@@ -405,11 +403,10 @@ namespace SODT_Common
 			FileName = fileName;
 			FileSize = fileSize;
 			SourceId = sourceId;
-			Compress = compress;
 		}
-		public static Transfer CreateRequest(string fileName, long fileSize, byte sourceId, bool compress)
+		public static Transfer CreateRequest(string fileName, long fileSize, byte sourceId)
 		{
-			return new Transfer(PacketCode.Request, fileName, fileSize, sourceId, compress);
+			return new Transfer(PacketCode.Request, fileName, fileSize, sourceId);
 		}
 		public static Transfer CreateRespone(Transfer request, byte sourceId)
 		{

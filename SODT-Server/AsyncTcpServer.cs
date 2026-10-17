@@ -1,6 +1,8 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
+using SODT_Common;
 
 
 namespace SODT_Server
@@ -10,28 +12,24 @@ namespace SODT_Server
 	/// </summary>
 	public class AsyncTcpServer
 	{
-		private const byte serverId = 1;
+		private const byte ServerId = 1;
 
 		/// <summary>
 		/// A dictionary of connected clients, keyed by their unique IDs.
 		/// </summary>
 		private readonly Dictionary<byte, TcpClient> clients = new();
+		private readonly Dictionary<byte, AesGcm> aesSessionKeys = new();
+		private readonly Dictionary<byte, ECDiffieHellman> ecdhSessionKeyGenerators = new();
 
-		/// <summary>
-		/// A dictionary of session keys for each client, keyed by their unique IDs.
-		/// </summary>
-		private readonly Dictionary<int, Aes> clientServerSessionKeys = new();
-
-		/// <summary>
-		/// Server's RSA encryption key pair.
-		/// </summary>
-		private readonly RSA encryption = RSAEncryption.Create();
-
+		private readonly ECDsa serverCertificate = PersistentEcdsa.GetOrCreateEcdsa();
+		
 		/// <summary>
 		/// Buffer size for incoming data.
 		/// </summary>
-		private const int bufferSize = 4096;
+		private const int BufferSize = MessageHelper.FullMessageSize;
 
+		// Initialize the server certificate (for signing messages).
+		// In a real-world application, you would load a persistent certificate from a secure location.
 		/// <summary>
 		/// Starts the TCP server on the specified IP address and port.
 		/// And listens for incoming client connections continuously.
@@ -56,34 +54,27 @@ namespace SODT_Server
 				{
 					var client = await listener.AcceptTcpClientAsync();
 
+					// handle full server:
+					while (clients.Count >= byte.MaxValue - 1)
+					{
+						SmartConsole.WriteLine("Server is full. Blocking new connections until a client disconnects.");
+						await Task.Delay(1000);
+					}
+					// Find next available client ID (2-255) for the new client.
+					// This loop will always find an available ID because the server is not full.
+					for (byte i = 2; i < byte.MaxValue; i++)
+					{
+						if (!clients.ContainsKey(i))
+						{
+							clientId = i;
+							break;
+						}
+					}
+					
 					// Add the new client to the dictionary of connected clients.
 					clients[clientId] = client;
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
-					_ = HandleClientAsync(clientId); //fire and forget; client handels itself
-
-					//set client targetId for next client
-					//main problem: if targetId is reused directly, clients might think they are connected to the wrong/old client
-					//solution: 
-					// first try default increment
-					clientId++;
-					// if not possible (because of max value or already used targetId), search for free targetId
-					if (clientId >= byte.MaxValue || clients.ContainsKey(clientId))
-					{
-						// block listener.Accept() until a free targetId is found
-						while (clients.Count >= byte.MaxValue - 1)
-						{
-							SmartConsole.WriteLine("Server is full");
-							await Task.Delay(1000);
-						}
-						//search for free targetId
-						for (clientId = 2; clientId < byte.MaxValue; clientId++)
-						{
-							if (!clients.ContainsKey(clientId))
-							{
-								break;
-							}
-						}
-					}
+					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
 				}
 				catch (Exception e)
 				{
@@ -98,10 +89,10 @@ namespace SODT_Server
 		/// <summary>
 		/// Handles a single incoming client connection asynchronously until the client disconnects.
 		/// </summary>
-		/// <param name="client">The TcpClient instance representing the connected client.</param>
+		/// <param name="clientId">The ID of the connected client.</param>
 		private async Task HandleClientAsync(byte clientId)
 		{
-			byte[] buffer = new byte[bufferSize];
+			byte[] buffer = new byte[BufferSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
 
@@ -109,7 +100,7 @@ namespace SODT_Server
 			while (client != null && client.Connected)
 			{
 				//wait unitil bufferSize bytes are received
-				while (stream.Socket.Available < bufferSize)
+				while (stream.Socket.Available < BufferSize)
 				{
 					//delay to reduce cpu usage
 					await Task.Delay(50);
@@ -129,12 +120,9 @@ namespace SODT_Server
 				byte id = buffer[0];
 
 				// If the message is meant for the server, handle it accordingly.
-				if (id == serverId)
+				if (id == ServerId)
 				{
-					// remove target and source Id bytes
-					ArraySegment<byte> messageBuffer = new(buffer, 2, bytesRead - 2);
-					var message = Decrypt(clientId, messageBuffer);
-					await HandleServerMessage(message, clientId);
+					await HandleServerMessage(Decrypt(buffer), clientId);
 					continue;
 				}
 				// Otherwise, redirect the message to the corresponding client.
@@ -144,39 +132,18 @@ namespace SODT_Server
 			//close client connection properly
 			await DisconnectClient(clientId, Disconnect.CreateRequest());
 		}
-		/// <summary>
-		/// Decrypts a message from a client.
-		/// </summary>
-		/// <param name="clientId"> The ID of the client that sent the message.</param>
-		/// <param name="message"> The encrypted message to decrypt. Without target and source Id bytes.</param>
-		/// <returns>The decrypted message as an <see cref="IBaseMessage"/> object or <see langword="null"/> if decryption fails.</returns>
-		private IBaseMessage? Decrypt(byte clientId, ArraySegment<byte> message)
+		private IBaseMessage? Decrypt(Span<byte> buffer)
 		{
-			//decrypt message
-			byte[] decryptedMessage;
-			//special case for discorvery (aka if no session key is null)
-			if (!clientServerSessionKeys.TryGetValue(clientId, out Aes? aes) || aes == null)
-			{
-				//decrypt
-				try
-				{
-					decryptedMessage = encryption.Decrypt(message[0..512], RSAEncryptionPadding.Pkcs1);
-
-				}
-				catch
-				{
-					SmartConsole.WriteLine($"Discovery failed for client {clientId}.");
-					return null;
-				}
-
-			}
-			else
-			{
-				decryptedMessage = aes.DecryptCfb(message, aes.IV); //decrypt with session key
-			}
+			byte sourceId = buffer[1];
+			// If the source client does not have an established AES session key, parse the message without decryption.
+			if (!aesSessionKeys.TryGetValue(sourceId, out AesGcm? aes))
+				return MessageHandler.ParseDecryptedMessage(buffer[MessageHelper.HeaderSizeWithoutContentLengthSize..]);
+			// Decrypt the message using the established AES session key.
+			Span<byte> decryptedMessage = new byte[MessageHelper.MessageWithContentSize];
+			EncryptionHandler.DecryptAesGcm(aes, buffer, decryptedMessage);
 			return MessageHandler.ParseDecryptedMessage(decryptedMessage);
 		}
-
+		
 		/// <summary>
 		/// Handles a message sent to the server.
 		/// </summary>
@@ -197,16 +164,6 @@ namespace SODT_Server
 				case ClientList clientList:
 					if (clientList.Code == (int)PacketCode.Request)
 						await SendListToAllClients();
-					break;
-				case KeyExchange keyExchange:
-					bool isExchangeSuccessful = await HandleExchange(keyExchange);
-					//send error message to all affected clients
-					if (!isExchangeSuccessful)
-					{
-						KeyExchange keyExchangeError = KeyExchange.CreateError(keyExchange);
-						await SendToClientEncrypted(keyExchange.SourceId, keyExchangeError);
-						await SendToClientEncrypted(keyExchange.TargetId, keyExchangeError);
-					}
 					break;
 				case Disconnect disconnect:
 					await DisconnectClient(clientId, disconnect);
@@ -243,72 +200,60 @@ namespace SODT_Server
 				await DisconnectClient(targetId, new Disconnect() { Code = 401 });
 			}
 		}
-
-		/// <summary>
-		/// Encrypts a message with the client's session key and sends it to the client asynchronously.
-		/// </summary>
-		/// <param name="targetId">Target Client</param>
-		/// <param name="baseMessage">Message</param>
-		/// <returns></returns>
+		
+		
+		private async Task SendToClientUnencrypted(byte targetId, IBaseMessage baseMessage)
+		{
+			// create final message
+			byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
+			finalMessage[0] = targetId;
+			finalMessage[1] = ServerId;
+			
+			// insert unencrypted message into final message
+			Array.Copy(baseMessage.ToBytes(), 0, finalMessage, MessageHelper.HeaderSizeWithoutContentLengthSize, MessageHelper.MessageWithContentSize); // TODO fix
+			
+			// send 
+			await SendToClient(targetId, finalMessage);
+		}
+		
 		private async Task SendToClientEncrypted(byte targetId, IBaseMessage baseMessage)
 		{
-			if (clientServerSessionKeys.TryGetValue(targetId, out Aes? encryption) && encryption != null)
+			ReadOnlyMemory<byte> toSend;
+			
+			if (aesSessionKeys.TryGetValue(targetId, out AesGcm? aes))
 			{
-				byte[] enc = [targetId, serverId, .. encryption.EncryptCfb(baseMessage.ToBytes(), encryption.IV)];
-				await SendToClient(targetId, enc);
+				byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
+				EncryptionHandler.EncryptAesGcm(aes, baseMessage, finalMessage);
+				finalMessage[0] = targetId;
+				finalMessage[1] = ServerId;
+				toSend = finalMessage;
 			}
 			else
 			{
-				SmartConsole.WriteLine($"Client {targetId} has no session key. Disconnecting client.");
-				await DisconnectClient(targetId, Disconnect.CreateRequest());
+				//This case should never happen because the CLI always checks and requests, if neccessary, a key exchange before sending a message.
+				SmartConsole.WriteLine($"No key for target client {targetId} to encrypt with. How do you even get here?");
+				throw new InvalidOperationException("No key for target client to encrypt with.");
 			}
-		}
 
-		/// <summary>
-		/// Handles a discovery message, including generating a response with encrypted data.
-		/// </summary>
-		/// <param name="clientId">Client Id assigned by server.</param>
-		/// <param name="discovery">Clients discovery request.</param>
-		/// <returns></returns>
+
+			await SendToClient(targetId, toSend);
+		}
+		
 		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
 		{
-			if (discovery.Key == null || discovery.Iv == null || discovery.Code != (int)PacketCode.Request)
-			{
-				return false;
-			}
-			//add client to clients dictionary already done in StartAsync
-
-			//add encryption key to keys dictionary
-			var aes = Aes.Create();
-			aes.Key = discovery.Key;
-			aes.IV = discovery.Iv;
-			clientServerSessionKeys.Add(clientId, aes);
-
-			//send client verification message with their targetId
-			await SendToClientEncrypted(clientId, Discovery.CreateResponse(clientId));
+			// create new ecdh session key generator for this client
+			ecdhSessionKeyGenerators[clientId] = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+			byte[] serverSessionPublicKey = ecdhSessionKeyGenerators[clientId].PublicKey.ExportSubjectPublicKeyInfo();
+			
+			// create aes session key for this client
+			aesSessionKeys[clientId] = EncryptionHandler.GenerateSessionKey(ecdhSessionKeyGenerators[clientId], discovery.PublicKey);
+			
+			// sign the discovery message with the server certificate and send it back to the client
+			byte[] toSign = [..discovery.PublicKey, ..serverSessionPublicKey, clientId];
+			await SendToClientUnencrypted(clientId, Discovery.CreateResponse(clientId,serverSessionPublicKey,serverCertificate.SignData(toSign, HashAlgorithmName.SHA256)));
 			return true;
 		}
-
-		/// <summary>
-		/// Handles a key exchange message.
-		/// This Message is used to establish a secure connection between two clients. <br></br>
-		/// This method redirects the key to the target client.
-		/// The key exchange request was decrypted by the server and will be encrypted by the server before sending it to the target client.
-		/// </summary>
-		/// <param name="clientId">Client who sent the keyExchange request</param>
-		/// <param name="keyExchange">keyExchange message</param>
-		/// <returns></returns>
-		private async Task<bool> HandleExchange(KeyExchange keyExchange)
-		{
-			if (keyExchange.Key == null || !clientServerSessionKeys.ContainsKey(keyExchange.TargetId))
-			{
-				return false;
-			}
-			//redirect key to target client
-			await SendToClientEncrypted(keyExchange.TargetId, keyExchange);
-			return true;
-		}
-
+		
 		/// <summary>
 		/// Disconnects a client from the server.
 		/// </summary>
@@ -317,15 +262,11 @@ namespace SODT_Server
 		/// <returns></returns>
 		private async Task DisconnectClient(byte clientId, Disconnect disconnect)
 		{
-			//Dispose session key
-			if (clientServerSessionKeys.TryGetValue(clientId, out Aes? aes))
-				aes.Dispose();
 			//dispose client
 			if (clients.TryGetValue(clientId, out TcpClient? client))
 				client.Dispose();
 			//remove client from dictionaries
 			_ = clients.Remove(clientId);
-			_ = clientServerSessionKeys.Remove(clientId);
 			SmartConsole.WriteLine($"{clientId} disconnected from server.");
 		}
 
@@ -339,7 +280,7 @@ namespace SODT_Server
 			foreach (var client in clients)
 			{
 				//check if client is still connected
-				//if a client is not connected, SendToClientEncrypted will throw an exception and the client will be disconnected
+				//if a client is not connected, SendToClientUnencrypted will throw an exception and the client will be disconnected
 				await SendToClientEncrypted(client.Key, ClientList.CreateRequest());
 			}
 

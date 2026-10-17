@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -8,5 +8,12 @@
         <Nullable>enable</Nullable>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     </PropertyGroup>
+
+    <!-- Schließt das Test-Projekt im Unterordner vom Build aus -->
+    <ItemGroup>
+        <Compile Remove="SODT-Server.Tests\**" />
+        <EmbeddedResource Remove="SODT-Server.Tests\**" />
+        <None Remove="SODT-Server.Tests\**" />
+    </ItemGroup>
 
 </Project>

@@ -1,47 +1,46 @@
 using System.Text;
 using System.Text.Json;
 
-namespace SODT_Server
+namespace SODT_Common
 {
 	/// <summary>
 	/// Represents a message handler class that can parse and send messages over a network stream.
 	/// </summary>
-	public class MessageHandler
+	public static class MessageHandler
 	{
 
 		/// <summary>
 		/// Parses a message packet received from a client into a <see cref="IBaseMessage"/> object.
 		/// </summary>
-		/// <param name="packet"> Decrypted message packet received from the client.</param>
+		/// <param name="messageWithContentSize"> Decrypted message packet received from the client.</param>
 		/// <returns> The parsed <see cref="IBaseMessage"/> message object or <see langword="null"/> if parsing fails.</returns>
-		public static IBaseMessage? ParseDecryptedMessage(byte[] packet)
+		public static IBaseMessage? ParseDecryptedMessage(ReadOnlySpan<byte> messageWithContentSize)
 		{
 			try
 			{
-				ushort length = BitConverter.ToUInt16(packet[0..2], 0);
-				string messageJson = Encoding.UTF8.GetString(packet[2..(length + 2)]);
-				return HandleType(messageJson);
+				// get first two bytes as length of content
+				ushort length = BitConverter.ToUInt16(messageWithContentSize[..MessageHelper.ContentLengthSize]);
+				
+				// get the content after the length bytes and pass it to HandleType for deserialization
+				return HandleType(messageWithContentSize[MessageHelper.ContentLengthSize..(length + MessageHelper.ContentLengthSize)]);
 			}
 			catch (Exception ex)
 			{
 				// Handle any JSON formatting errors that occur during deserialization.
-				SmartConsole.WriteLine($"Error while Parsing: {ex.Message}");
 				return null;
 			}
 		}
-		/// <summary>
-		/// Handles a message of an unknown type.
-		/// </summary>
-		/// <param name="messageJson">The JSON representation of the message.</param>
-		/// <returns>The deserialized message object parsed wrapped in an <see cref="IBaseMessage"/> object.</returns>
-		private static IBaseMessage HandleType(string messageJson)
+
+		private static IBaseMessage HandleType(ReadOnlySpan<byte> content)
 		{
-			return JsonSerializer.Deserialize<BaseMessage>(messageJson).Type switch
+			return JsonSerializer.Deserialize<BaseMessage>(content).Type switch
 			{
-				"discovery" => JsonSerializer.Deserialize<Discovery>(messageJson),
-				"exchange" => JsonSerializer.Deserialize<KeyExchange>(messageJson),
-				"disconnect" => JsonSerializer.Deserialize<Disconnect>(messageJson),
-				"clients" => JsonSerializer.Deserialize<ClientList>(messageJson),
+				"discovery" => JsonSerializer.Deserialize<Discovery>(content),
+				"clients" => JsonSerializer.Deserialize<ClientList>(content),
+				"exchange" => JsonSerializer.Deserialize<KeyExchange>(content),
+				"transfer" => JsonSerializer.Deserialize<Transfer>(content),
+				"file" => JsonSerializer.Deserialize<TransferData>(content),
+				"disconnect" => JsonSerializer.Deserialize<Disconnect>(content),
 				_ => throw new ArgumentException("Unknown message type.")
 			};
 

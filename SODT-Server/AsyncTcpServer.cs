@@ -122,8 +122,7 @@ namespace SODT_Server
 				// If the message is meant for the server, handle it accordingly.
 				if (id == ServerId)
 				{
-					var message = MessageHandler.ParseDecryptedMessage(buffer.AsSpan()[MessageHelper.HeaderSizeWithoutContentLengthSize..]);
-					await HandleServerMessage(message, clientId);
+					await HandleServerMessage(Decrypt(buffer), clientId);
 					continue;
 				}
 				// Otherwise, redirect the message to the corresponding client.
@@ -133,7 +132,18 @@ namespace SODT_Server
 			//close client connection properly
 			await DisconnectClient(clientId, Disconnect.CreateRequest());
 		}
-
+		private IBaseMessage? Decrypt(Span<byte> buffer)
+		{
+			byte sourceId = buffer[1];
+			// If the source client does not have an established AES session key, parse the message without decryption.
+			if (!aesSessionKeys.TryGetValue(sourceId, out AesGcm? aes))
+				return MessageHandler.ParseDecryptedMessage(buffer[MessageHelper.HeaderSizeWithoutContentLengthSize..]);
+			// Decrypt the message using the established AES session key.
+			Span<byte> decryptedMessage = new byte[MessageHelper.MessageWithContentSize];
+			EncryptionHandler.DecryptAesGcm(aes, buffer, decryptedMessage);
+			return MessageHandler.ParseDecryptedMessage(decryptedMessage);
+		}
+		
 		/// <summary>
 		/// Handles a message sent to the server.
 		/// </summary>
@@ -235,6 +245,9 @@ namespace SODT_Server
 			ecdhSessionKeyGenerators[clientId] = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
 			byte[] serverSessionPublicKey = ecdhSessionKeyGenerators[clientId].PublicKey.ExportSubjectPublicKeyInfo();
 			
+			// create aes session key for this client
+			aesSessionKeys[clientId] = EncryptionHandler.GenerateSessionKey(ecdhSessionKeyGenerators[clientId], discovery.PublicKey);
+			
 			// sign the discovery message with the server certificate and send it back to the client
 			byte[] toSign = [..discovery.PublicKey, ..serverSessionPublicKey, clientId];
 			await SendToClientUnencrypted(clientId, Discovery.CreateResponse(clientId,serverSessionPublicKey,serverCertificate.SignData(toSign, HashAlgorithmName.SHA256)));
@@ -268,14 +281,14 @@ namespace SODT_Server
 			{
 				//check if client is still connected
 				//if a client is not connected, SendToClientUnencrypted will throw an exception and the client will be disconnected
-				await SendToClientUnencrypted(client.Key, ClientList.CreateRequest());
+				await SendToClientEncrypted(client.Key, ClientList.CreateRequest());
 			}
 
 			//send list to all clients
 			ClientList clientList = ClientList.CreateResponse(clients.Keys.ToArray());
 			foreach (var client in clients)
 			{
-				await SendToClientUnencrypted(client.Key, clientList);
+				await SendToClientEncrypted(client.Key, clientList);
 			}
 		}
 	}

@@ -36,6 +36,7 @@ namespace SODT_Common
 			return JsonSerializer.Deserialize<BaseMessage>(content).Type switch
 			{
 				"discovery" => JsonSerializer.Deserialize<Discovery>(content),
+				"pingpong" => JsonSerializer.Deserialize<PingPong>(content),
 				"clients" => JsonSerializer.Deserialize<ClientList>(content),
 				"exchange" => JsonSerializer.Deserialize<KeyExchange>(content),
 				"transfer" => JsonSerializer.Deserialize<Transfer>(content),

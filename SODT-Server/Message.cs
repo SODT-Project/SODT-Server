@@ -75,6 +75,7 @@ namespace SODT_Common
 			return bytes;
 		}
 	}
+	
 	/// <summary>
 	/// Represents a base interface for all messages in the system. This class serves as a foundation 
 	/// for creating other message types that inherit its properties and functionality.
@@ -138,6 +139,50 @@ namespace SODT_Common
 			return MessageHelper.ToBytes(this);
 		}
 	}
+	
+	/// <summary>
+	/// Represents a ping-pong message in the system. This struct is used to check the connectivity between clients and servers.
+	/// </summary>
+	public struct PingPong : IBaseMessage
+	{
+		[JsonPropertyName("uuid")]
+		public int Uuid { get; set; }
+
+		[JsonPropertyName("code")]
+		public int Code { get; set; }
+
+		[JsonPropertyName("type")]
+		public string Type { get; set; }
+
+		private PingPong(PacketCode code)
+		{
+			Uuid = new Random().Next();
+			Code = (int)code;
+			Type = "pingpong";
+		}
+		
+		public static PingPong CreateRequest()
+		{
+			return new PingPong(PacketCode.Request);
+		}
+		
+		public static PingPong CreateResponse()
+		{
+			return new PingPong(PacketCode.Ok);
+		}
+
+		public string ToJson()
+		{
+			return JsonSerializer.Serialize(this);
+		}
+		
+		public byte[] ToBytes()
+		{
+			return MessageHelper.ToBytes(this);
+		}
+		
+	}
+	
 	public struct Discovery : IBaseMessage
 	{
 		[JsonPropertyName("uuid")]
@@ -188,6 +233,7 @@ namespace SODT_Common
 		}
 		
 	}
+	
 	/// <summary>
 	/// Represents a key exchange message in the system. This class inherits from BaseMessage and provides 
 	/// additional properties relevant to key exchange operations.

@@ -64,7 +64,7 @@ namespace SODT_Common
 		/// <param name="ownPublicSessionPasswordHash"> The public session password hash of the current client.</param>
 		/// <param name="remotePublicSessionPasswordHash"> The public session password hash of the other client.</param>
 		/// <returns> <see langword="true"/> if the session password hash matches, otherwise <see langword="false"/>.</returns>
-		public static bool DoesSessionHashMatch(byte[]? ownPublicSessionPasswordHash, byte[]? remotePublicSessionPasswordHash)
+		public static bool DoesSessionHashMatch(byte[]? ownPublicSessionPasswordHash, byte[]? remotePublicSessionPasswordHash) // TODO return StatusCode?
 		{
 			// both session password hashes are null, no session password is set for authentication
 			if (ownPublicSessionPasswordHash == null && remotePublicSessionPasswordHash == null)

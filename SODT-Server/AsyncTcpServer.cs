@@ -1,7 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using SODT_Common;
 
 
@@ -99,7 +98,7 @@ namespace SODT_Server
 			int clientPingTimer = 5000; // 5 seconds
 
 			// Listen for incoming data from the client in an infinite loop.
-			while (client != null && client.Connected)
+			while (client.Connected)
 			{
 				//wait until bufferSize bytes are received
 				if (stream.Socket.Available < BufferSize)
@@ -130,7 +129,7 @@ namespace SODT_Server
 
 			}
 			//close client connection properly
-			await DisconnectClient(clientId, Disconnect.CreateRequest());
+			await DisconnectClientInternal(clientId);
 		}
 		private IBaseMessage? Decrypt(Span<byte> buffer)
 		{
@@ -148,7 +147,7 @@ namespace SODT_Server
 		/// Handles a message sent to the server.
 		/// </summary>
 		/// <param name="message">Received message</param>
-		/// <param name="clientId">Source Id</param>
+		/// <param name="clientId">SourceId</param>
 		/// <returns> A Task representing the asynchronous operation.</returns>
 		private async Task HandleServerMessage(IBaseMessage? message, byte clientId)
 		{
@@ -159,22 +158,22 @@ namespace SODT_Server
 					if (isDiscoverySuccessful)
 						await SendListToAllClients();
 					else
-						await DisconnectClient(clientId, Disconnect.CreateRequest());
+						await DisconnectClientInternal(clientId);
 					break;
 				case ClientList clientList:
 					if (clientList.Code == (int)PacketCode.Request)
 						await SendListToAllClients();
 					break;
-				case Disconnect disconnect:
-					await DisconnectClient(clientId, disconnect);
-					await SendListToAllClients();
+				case Disconnect:
+					await DisconnectClientInternal(clientId);
 					break;
 				case PingPong pingPong:
 					HandlePingPongMessage(clientId, pingPong);
 					break;
 				case null:
 					SmartConsole.WriteLine($"Client {clientId} sent an invalid message. Disconnecting client.");
-					await DisconnectClient(clientId, Disconnect.CreateRequest());
+					await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
+					await DisconnectClientInternal(clientId);
 					break;
 				default:
 					SmartConsole.WriteLine("Unknown message type received. Ignoring message.");
@@ -212,7 +211,7 @@ namespace SODT_Server
 			{
 				SmartConsole.WriteLine($"Sending Message to {targetId} failed. Cause: {e.Message}");
 				SmartConsole.WriteLine($"Disconnecting client {targetId}");
-				await DisconnectClient(targetId, new Disconnect() { Code = 401 });
+				await DisconnectClientInternal(targetId);
 			}
 		}
 		
@@ -245,7 +244,7 @@ namespace SODT_Server
 			}
 			else
 			{
-				//This case should never happen because the CLI always checks and requests, if neccessary, a key exchange before sending a message.
+				//This case should never happen because the CLI always checks and requests, if necessary, a key exchange before sending a message.
 				SmartConsole.WriteLine($"No key for target client {targetId} to encrypt with. How do you even get here?");
 				throw new InvalidOperationException("No key for target client to encrypt with.");
 			}
@@ -271,18 +270,27 @@ namespace SODT_Server
 		
 		/// <summary>
 		/// Disconnects a client from the server.
+		/// Sends an updated client list to all connected clients after the disconnection.
 		/// </summary>
 		/// <param name="clientId">Client to disconnect</param>
-		/// <param name="disconnect">Disconnect message</param>
 		/// <returns></returns>
-		private async Task DisconnectClient(byte clientId, Disconnect disconnect)
+		private async Task DisconnectClientInternal(byte clientId)
 		{
 			//dispose client
 			if (clients.TryGetValue(clientId, out TcpClient? client))
-				client.Dispose();
+				client.Close();
+			if (ecdhSessionKeyGenerators.TryGetValue(clientId, out ECDiffieHellman? ecdh))
+				ecdh.Dispose();
+			if (aesSessionKeys.TryGetValue(clientId, out AesGcm? aes))
+				aes.Dispose();
+
 			//remove client from dictionaries
 			_ = clients.Remove(clientId);
+			_ = ecdhSessionKeyGenerators.Remove(clientId);
+			_ = aesSessionKeys.Remove(clientId);
 			SmartConsole.WriteLine($"{clientId} disconnected from server.");
+			SmartConsole.WriteLine("Update client list for all clients.");
+			await SendListToAllClients();
 		}
 
 		/// <summary>

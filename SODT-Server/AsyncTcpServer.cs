@@ -23,13 +23,6 @@ namespace SODT_Server
 		private readonly ECDsa serverCertificate = PersistentEcdsa.GetOrCreateEcdsa();
 		
 		/// <summary>
-		/// Buffer size for incoming data.
-		/// </summary>
-		private const int BufferSize = MessageHelper.FullMessageSize; // TODO remove
-
-		// Initialize the server certificate (for signing messages).
-		// In a real-world application, you would load a persistent certificate from a secure location.
-		/// <summary>
 		/// Starts the TCP server on the specified IP address and port.
 		/// And listens for incoming client connections continuously.
 		/// </summary>
@@ -92,7 +85,7 @@ namespace SODT_Server
 		/// <param name="clientId">The ID of the connected client.</param>
 		private async Task HandleClientAsync(byte clientId)
 		{
-			byte[] buffer = new byte[BufferSize];
+			byte[] buffer = new byte[MessageHelper.FullMessageSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
 			int clientPingTimer = 5000; // 5 seconds
@@ -101,7 +94,7 @@ namespace SODT_Server
 			while (client.Connected)
 			{
 				//wait until bufferSize bytes are received
-				if (stream.Socket.Available < BufferSize)
+				if (stream.Socket.Available < MessageHelper.FullMessageSize)
 				{
 					if (clientPingTimer <= 0)
 					{
@@ -215,17 +208,11 @@ namespace SODT_Server
 			}
 		}
 		
-		
-		private async Task SendToClientUnencrypted(byte targetId, IBaseMessage baseMessage)
+		private async Task SendToClientUnencrypted(byte targetId, Discovery baseMessage)
 		{
 			// create final message
-			byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
-			finalMessage[0] = targetId;
-			finalMessage[1] = ServerId;
-			
-			// insert unencrypted message into final message
-			Array.Copy(baseMessage.ToBytes(), 0, finalMessage, MessageHelper.HeaderSizeWithoutContentLengthSize, MessageHelper.MessageWithContentSize); // TODO fix
-			
+			byte[] buffer = [targetId, ServerId, .. new byte[MessageHelper.NonceSize + MessageHelper.TagSize], ..baseMessage.ToBytes()];
+			ReadOnlyMemory<byte> finalMessage = buffer;
 			// send 
 			await SendToClient(targetId, finalMessage);
 		}

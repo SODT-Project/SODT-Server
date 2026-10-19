@@ -26,7 +26,7 @@ namespace SODT_Server
 		/// <summary>
 		/// Buffer size for incoming data.
 		/// </summary>
-		private const int BufferSize = MessageHelper.FullMessageSize;
+		private const int BufferSize = MessageHelper.FullMessageSize; // TODO remove
 
 		// Initialize the server certificate (for signing messages).
 		// In a real-world application, you would load a persistent certificate from a secure location.
@@ -73,6 +73,7 @@ namespace SODT_Server
 					
 					// Add the new client to the dictionary of connected clients.
 					clients[clientId] = client;
+					
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
 					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
 				}
@@ -95,38 +96,37 @@ namespace SODT_Server
 			byte[] buffer = new byte[BufferSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
+			int clientPingTimer = 5000; // 5 seconds
 
 			// Listen for incoming data from the client in an infinite loop.
 			while (client != null && client.Connected)
 			{
-				//wait unitil bufferSize bytes are received
-				while (stream.Socket.Available < BufferSize)
+				//wait until bufferSize bytes are received
+				if (stream.Socket.Available < BufferSize)
 				{
+					if (clientPingTimer <= 0)
+					{
+						await SendToClientEncrypted(clientId, PingPong.CreateRequest());
+						clientPingTimer = 5000; // reset ping timer
+					}
+					
 					//delay to reduce cpu usage
 					await Task.Delay(50);
-
-					//check if client is still connected
-					if (client == null || !client.Connected)
-					{
-						await DisconnectClient(clientId, Disconnect.CreateRequest());
-						return;
-					}
+					clientPingTimer -= 50;
+					
+					continue;
 				}
 
 				// Read the incoming data from the client into the buffer.
-				int bytesRead = await stream.ReadAsync(buffer);
+				_ = await stream.ReadAsync(buffer);
 
 				// Extract the message ID and payload from the incoming data.
 				byte id = buffer[0];
-
-				// If the message is meant for the server, handle it accordingly.
+				
 				if (id == ServerId)
-				{
 					await HandleServerMessage(Decrypt(buffer), clientId);
-					continue;
-				}
-				// Otherwise, redirect the message to the corresponding client.
-				await SendToClient(id, buffer);
+				else
+					await SendToClient(id, buffer);
 
 			}
 			//close client connection properly
@@ -169,12 +169,27 @@ namespace SODT_Server
 					await DisconnectClient(clientId, disconnect);
 					await SendListToAllClients();
 					break;
+				case PingPong pingPong:
+					HandlePingPongMessage(clientId, pingPong);
+					break;
 				case null:
 					SmartConsole.WriteLine($"Client {clientId} sent an invalid message. Disconnecting client.");
 					await DisconnectClient(clientId, Disconnect.CreateRequest());
 					break;
 				default:
 					SmartConsole.WriteLine("Unknown message type received. Ignoring message.");
+					break;
+			}
+		}
+		private static void HandlePingPongMessage(byte clientId, PingPong pingPong)
+		{
+			switch(pingPong.Code)
+			{
+				case (int)PacketCode.Ok:
+					SmartConsole.WriteLine($"Received Pong from client {clientId}");
+					break;
+				default:
+					SmartConsole.WriteLine($"Unknown PingPong code received from client {clientId}. Ignoring message.");
 					break;
 			}
 		}

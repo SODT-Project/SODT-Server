@@ -12,7 +12,6 @@ namespace SODT_Server.Tests
 			var task = server.StartAsync(IPAddress.Any, 45645);
 			await Task.Delay(1000); // wait for 1 second to let the server start
 			Assert.True(task != null && !task.IsFaulted, "Server failed to start.");
-			
 		}
 	}
 }

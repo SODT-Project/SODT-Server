@@ -37,17 +37,9 @@ namespace SODT_Server
 				return;
 			}
 			
-			string listenIp = Environment.GetEnvironmentVariable("SODT_LISTEN_IP") ?? "0.0.0.0";
-			if (!IPAddress.TryParse(listenIp, out var ipAddress))
-				throw new ArgumentException($"SODT_LISTEN_IP is not a valid IP address: {listenIp}");
-
-			string listenPortValue = Environment.GetEnvironmentVariable("SODT_LISTEN_PORT") ?? "45645";
-			if (!int.TryParse(listenPortValue, out int port) || port is < 1 or > 65535)
-				throw new ArgumentException($"SODT_LISTEN_PORT must be between 1 and 65535: {listenPortValue}");
-
-			// Start the TCP server asynchronously using the configured bind address and port.
+			// Start the TCP server on all interfaces at the standard SODT port.
 			var server = new AsyncTcpServer();
-			await server.StartAsync(ipAddress, port);
+			await server.StartAsync(IPAddress.Any, 45645);
 		}
 	}
 }

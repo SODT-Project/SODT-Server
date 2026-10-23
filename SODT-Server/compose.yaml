@@ -1,6 +1,6 @@
 ﻿services:
   sodt-server:
-    image: sodt-server
+    image: ghcr.io/sodt-project/sodt-server:latest
     build:
       context: .
       dockerfile: Dockerfile

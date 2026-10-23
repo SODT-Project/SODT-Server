@@ -5,17 +5,12 @@ namespace SODT_Server
 	public static class SmartConsole
 	{
 		/// <summary>
-		/// Gets or sets a value indicating whether to log messages to the console.
-		/// </summary>
-		public static bool Log { get; set; } = false;
-		/// <summary>
 		/// Writes a message to the console with a timestamp.
 		/// </summary>
 		/// <param name="message">Message to write to the console.</param>
 		public static void WriteLine(string message)
 		{
-			if (Log)
-				Console.WriteLine($"{DateTime.Now}: {message}");
+			Console.WriteLine($"{DateTime.Now}: {message}");
 		}
 	}
 
@@ -32,9 +27,6 @@ namespace SODT_Server
 		/// </summary>
 		public static async Task Main(string[] args)
 		{
-			// Enable logging if the 'log' argument is passed.
-			SmartConsole.Log = args.Contains("log");
-			
 			// Generate RSA key pair if they don't already exist or if the 'force-gen' argument is passed.
 			bool forceRegeneration = args.Contains("force-gen");
 			if (forceRegeneration)
@@ -45,9 +37,17 @@ namespace SODT_Server
 				return;
 			}
 			
-			// Start the TCP server asynchronously on the loopback address and port 45645.
+			string listenIp = Environment.GetEnvironmentVariable("SODT_LISTEN_IP") ?? "0.0.0.0";
+			if (!IPAddress.TryParse(listenIp, out var ipAddress))
+				throw new ArgumentException($"SODT_LISTEN_IP is not a valid IP address: {listenIp}");
+
+			string listenPortValue = Environment.GetEnvironmentVariable("SODT_LISTEN_PORT") ?? "45645";
+			if (!int.TryParse(listenPortValue, out int port) || port is < 1 or > 65535)
+				throw new ArgumentException($"SODT_LISTEN_PORT must be between 1 and 65535: {listenPortValue}");
+
+			// Start the TCP server asynchronously using the configured bind address and port.
 			var server = new AsyncTcpServer();
-			await server.StartAsync(IPAddress.Any, 45645);
+			await server.StartAsync(ipAddress, port);
 		}
 	}
 }

@@ -4,4 +4,14 @@
     build:
       context: .
       dockerfile: Dockerfile
+    environment:
+      SODT_LISTEN_IP: ${SODT_LISTEN_IP:-0.0.0.0}
+      SODT_LISTEN_PORT: ${SODT_LISTEN_PORT:-45645}
+    ports:
+      - "${SODT_LISTEN_PORT:-45645}:${SODT_LISTEN_PORT:-45645}"
+    volumes:
+      - sodt-certificates:/app/certs
+    restart: unless-stopped
 
+volumes:
+  sodt-certificates:

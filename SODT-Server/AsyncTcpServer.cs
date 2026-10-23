@@ -19,6 +19,7 @@ namespace SODT_Server
 		private readonly Dictionary<byte, TcpClient> clients = new();
 		private readonly Dictionary<byte, AesGcm> aesSessionKeys = new();
 		private readonly Dictionary<byte, ECDiffieHellman> ecdhSessionKeyGenerators = new();
+		private readonly Dictionary<byte, DateTime> pingPongTimers = new();
 
 		private readonly ECDsa serverCertificate = PersistentEcdsa.GetOrCreateEcdsa();
 		
@@ -68,6 +69,7 @@ namespace SODT_Server
 					
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
 					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
+					_ = ClientConnectionMonitor(clientId); //fire and forget; monitor client connection
 				}
 				catch (Exception e)
 				{
@@ -88,29 +90,19 @@ namespace SODT_Server
 			byte[] buffer = new byte[MessageHelper.FullMessageSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
-			int clientPingTimer = 5000; // 5 seconds
 
 			// Listen for incoming data from the client in an infinite loop.
 			while (client.Connected)
 			{
 				//wait until bufferSize bytes are received
-				if (stream.Socket.Available < MessageHelper.FullMessageSize)
+				int bytesRead = 0;
+				while (bytesRead < buffer.Length)
 				{
-					if (clientPingTimer <= 0)
-					{
-						await SendToClientEncrypted(clientId, PingPong.CreateRequest());
-						clientPingTimer = 5000; // reset ping timer
-					}
-					
-					//delay to reduce cpu usage
-					await Task.Delay(50);
-					clientPingTimer -= 50;
-					
-					continue;
+					int read = await stream.ReadAsync(buffer.AsMemory(bytesRead));
+					if (read == 0)
+						return;
+					bytesRead += read;
 				}
-
-				// Read the incoming data from the client into the buffer.
-				_ = await stream.ReadAsync(buffer);
 
 				// Extract the message ID and payload from the incoming data.
 				byte id = buffer[0];
@@ -161,7 +153,7 @@ namespace SODT_Server
 					await DisconnectClientInternal(clientId);
 					break;
 				case PingPong pingPong:
-					HandlePingPongMessage(clientId, pingPong);
+					await HandlePingMessage(clientId, pingPong);
 					break;
 				case null:
 					SmartConsole.WriteLine($"Client {clientId} sent an invalid message. Disconnecting client.");
@@ -173,16 +165,38 @@ namespace SODT_Server
 					break;
 			}
 		}
-		private static void HandlePingPongMessage(byte clientId, PingPong pingPong)
+		private async Task HandlePingMessage(byte clientId, PingPong pingPong)
 		{
 			switch(pingPong.Code)
 			{
-				case (int)PacketCode.Ok:
-					SmartConsole.WriteLine($"Received Pong from client {clientId}");
+				case (int)PacketCode.Request:
+					SmartConsole.WriteLine($"Received Ping from client {clientId}");
+					pingPongTimers[clientId] = DateTime.Now;
+					await SendToClientEncrypted(clientId, PingPong.CreateResponse());
 					break;
 				default:
 					SmartConsole.WriteLine($"Unknown PingPong code received from client {clientId}. Ignoring message.");
 					break;
+			}
+		}
+
+		/// <summary>
+		/// Monitors the connection of a client.
+		/// IF the Client does not send a ping message for more than 10 seconds, the client will be disconnected.
+		/// </summary>
+		/// <param name="clientId">The ID of the client to monitor.</param>
+		private async Task ClientConnectionMonitor(byte clientId)
+		{
+			while (clients.TryGetValue(clientId, out TcpClient? client) && client.Connected)
+			{
+				await Task.Delay(10000);
+
+				pingPongTimers.TryGetValue(clientId, out DateTime lastPing);
+				if ((DateTime.Now - lastPing).TotalSeconds < 10)
+					continue;
+				SmartConsole.WriteLine($"Client {clientId} is AFK for more than 10 seconds. Disconnecting client.");
+				await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
+				await DisconnectClientInternal(clientId);
 			}
 		}
 
@@ -275,6 +289,7 @@ namespace SODT_Server
 			_ = clients.Remove(clientId);
 			_ = ecdhSessionKeyGenerators.Remove(clientId);
 			_ = aesSessionKeys.Remove(clientId);
+			_ = pingPongTimers.Remove(clientId);
 			SmartConsole.WriteLine($"{clientId} disconnected from server.");
 			SmartConsole.WriteLine("Update client list for all clients.");
 			await SendListToAllClients();

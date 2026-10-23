@@ -2,7 +2,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace SODT_Common
+namespace SODT_Server.SODT_Common
 {
 	public enum PacketCode
 	{

@@ -1,7 +1,6 @@
-using System.Text;
 using System.Text.Json;
 
-namespace SODT_Common
+namespace SODT_Server.SODT_Common
 {
 	/// <summary>
 	/// Represents a message handler class that can parse and send messages over a network stream.

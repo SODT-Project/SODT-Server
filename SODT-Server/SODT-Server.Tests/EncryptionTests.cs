@@ -1,5 +1,5 @@
 using System.Security.Cryptography;
-using SODT_Common;
+using SODT_Server.SODT_Common;
 
 namespace SODT_Server.Tests
 {

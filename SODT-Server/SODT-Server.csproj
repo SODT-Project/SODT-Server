@@ -7,11 +7,12 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     </PropertyGroup>
 
-    <!-- Schließt das Test-Projekt im Unterordner vom Build aus -->
     <ItemGroup>
-        <Compile Remove="SODT-Server.Tests\**" />
+        <Compile Include="**/*.cs"
+                 Exclude="SODT-Server.Tests/**/*.cs;bin/**/*.cs;obj/**/*.cs" />
         <EmbeddedResource Remove="SODT-Server.Tests\**" />
         <None Remove="SODT-Server.Tests\**" />
     </ItemGroup>

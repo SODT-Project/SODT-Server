@@ -4,6 +4,8 @@
   &lt;TestAncestor&gt;
     &lt;TestId&gt;xUnit::A0E234C1-3423-4D99-9956-3BE8FB7AE716::net10.0::SODT_Server.Tests.EncryptionsTests.EncryptAndDecryptLocalTests&lt;/TestId&gt;
     &lt;TestId&gt;xUnit::A0E234C1-3423-4D99-9956-3BE8FB7AE716::net10.0::SODT_Server.Tests.MessageTests.MessageToByteConversionSizeTest&lt;/TestId&gt;
+    &lt;TestId&gt;xUnit::A0E234C1-3423-4D99-9956-3BE8FB7AE716::net10.0::SODT_Server.Tests.EncryptionTests&lt;/TestId&gt;
+    &lt;TestId&gt;xUnit::A0E234C1-3423-4D99-9956-3BE8FB7AE716::net10.0::SODT_Server.Tests.BasicServerTests&lt;/TestId&gt;
   &lt;/TestAncestor&gt;
 &lt;/SessionState&gt;</s:String>
 	</wpf:ResourceDictionary>

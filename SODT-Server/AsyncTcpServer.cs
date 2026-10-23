@@ -1,7 +1,6 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
 using SODT_Common;
 
 
@@ -20,16 +19,10 @@ namespace SODT_Server
 		private readonly Dictionary<byte, TcpClient> clients = new();
 		private readonly Dictionary<byte, AesGcm> aesSessionKeys = new();
 		private readonly Dictionary<byte, ECDiffieHellman> ecdhSessionKeyGenerators = new();
+		private readonly Dictionary<byte, DateTime> pingPongTimers = new();
 
 		private readonly ECDsa serverCertificate = PersistentEcdsa.GetOrCreateEcdsa();
 		
-		/// <summary>
-		/// Buffer size for incoming data.
-		/// </summary>
-		private const int BufferSize = MessageHelper.FullMessageSize; // TODO remove
-
-		// Initialize the server certificate (for signing messages).
-		// In a real-world application, you would load a persistent certificate from a secure location.
 		/// <summary>
 		/// Starts the TCP server on the specified IP address and port.
 		/// And listens for incoming client connections continuously.
@@ -76,6 +69,7 @@ namespace SODT_Server
 					
 					SmartConsole.WriteLine($"New client connected. Assigned id: {clientId}");
 					_ = HandleClientAsync(clientId); //fire and forget; client handles itself
+					_ = ClientConnectionMonitor(clientId); //fire and forget; monitor client connection
 				}
 				catch (Exception e)
 				{
@@ -93,32 +87,22 @@ namespace SODT_Server
 		/// <param name="clientId">The ID of the connected client.</param>
 		private async Task HandleClientAsync(byte clientId)
 		{
-			byte[] buffer = new byte[BufferSize];
+			byte[] buffer = new byte[MessageHelper.FullMessageSize];
 			var client = clients[clientId];
 			var stream = client.GetStream();
-			int clientPingTimer = 5000; // 5 seconds
 
 			// Listen for incoming data from the client in an infinite loop.
-			while (client != null && client.Connected)
+			while (client.Connected)
 			{
 				//wait until bufferSize bytes are received
-				if (stream.Socket.Available < BufferSize)
+				int bytesRead = 0;
+				while (bytesRead < buffer.Length)
 				{
-					if (clientPingTimer <= 0)
-					{
-						await SendToClientEncrypted(clientId, PingPong.CreateRequest());
-						clientPingTimer = 5000; // reset ping timer
-					}
-					
-					//delay to reduce cpu usage
-					await Task.Delay(50);
-					clientPingTimer -= 50;
-					
-					continue;
+					int read = await stream.ReadAsync(buffer.AsMemory(bytesRead));
+					if (read == 0)
+						return;
+					bytesRead += read;
 				}
-
-				// Read the incoming data from the client into the buffer.
-				_ = await stream.ReadAsync(buffer);
 
 				// Extract the message ID and payload from the incoming data.
 				byte id = buffer[0];
@@ -130,7 +114,7 @@ namespace SODT_Server
 
 			}
 			//close client connection properly
-			await DisconnectClient(clientId, Disconnect.CreateRequest());
+			await DisconnectClientInternal(clientId);
 		}
 		private IBaseMessage? Decrypt(Span<byte> buffer)
 		{
@@ -148,7 +132,7 @@ namespace SODT_Server
 		/// Handles a message sent to the server.
 		/// </summary>
 		/// <param name="message">Received message</param>
-		/// <param name="clientId">Source Id</param>
+		/// <param name="clientId">SourceId</param>
 		/// <returns> A Task representing the asynchronous operation.</returns>
 		private async Task HandleServerMessage(IBaseMessage? message, byte clientId)
 		{
@@ -159,38 +143,60 @@ namespace SODT_Server
 					if (isDiscoverySuccessful)
 						await SendListToAllClients();
 					else
-						await DisconnectClient(clientId, Disconnect.CreateRequest());
+						await DisconnectClientInternal(clientId);
 					break;
 				case ClientList clientList:
 					if (clientList.Code == (int)PacketCode.Request)
 						await SendListToAllClients();
 					break;
-				case Disconnect disconnect:
-					await DisconnectClient(clientId, disconnect);
-					await SendListToAllClients();
+				case Disconnect:
+					await DisconnectClientInternal(clientId);
 					break;
 				case PingPong pingPong:
-					HandlePingPongMessage(clientId, pingPong);
+					await HandlePingMessage(clientId, pingPong);
 					break;
 				case null:
 					SmartConsole.WriteLine($"Client {clientId} sent an invalid message. Disconnecting client.");
-					await DisconnectClient(clientId, Disconnect.CreateRequest());
+					await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
+					await DisconnectClientInternal(clientId);
 					break;
 				default:
 					SmartConsole.WriteLine("Unknown message type received. Ignoring message.");
 					break;
 			}
 		}
-		private static void HandlePingPongMessage(byte clientId, PingPong pingPong)
+		private async Task HandlePingMessage(byte clientId, PingPong pingPong)
 		{
 			switch(pingPong.Code)
 			{
-				case (int)PacketCode.Ok:
-					SmartConsole.WriteLine($"Received Pong from client {clientId}");
+				case (int)PacketCode.Request:
+					SmartConsole.WriteLine($"Received Ping from client {clientId}");
+					pingPongTimers[clientId] = DateTime.Now;
+					await SendToClientEncrypted(clientId, PingPong.CreateResponse());
 					break;
 				default:
 					SmartConsole.WriteLine($"Unknown PingPong code received from client {clientId}. Ignoring message.");
 					break;
+			}
+		}
+
+		/// <summary>
+		/// Monitors the connection of a client.
+		/// IF the Client does not send a ping message for more than 10 seconds, the client will be disconnected.
+		/// </summary>
+		/// <param name="clientId">The ID of the client to monitor.</param>
+		private async Task ClientConnectionMonitor(byte clientId)
+		{
+			while (clients.TryGetValue(clientId, out TcpClient? client) && client.Connected)
+			{
+				await Task.Delay(10000);
+
+				pingPongTimers.TryGetValue(clientId, out DateTime lastPing);
+				if ((DateTime.Now - lastPing).TotalSeconds < 10)
+					continue;
+				SmartConsole.WriteLine($"Client {clientId} is AFK for more than 10 seconds. Disconnecting client.");
+				await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
+				await DisconnectClientInternal(clientId);
 			}
 		}
 
@@ -212,21 +218,15 @@ namespace SODT_Server
 			{
 				SmartConsole.WriteLine($"Sending Message to {targetId} failed. Cause: {e.Message}");
 				SmartConsole.WriteLine($"Disconnecting client {targetId}");
-				await DisconnectClient(targetId, new Disconnect() { Code = 401 });
+				await DisconnectClientInternal(targetId);
 			}
 		}
 		
-		
-		private async Task SendToClientUnencrypted(byte targetId, IBaseMessage baseMessage)
+		private async Task SendToClientUnencrypted(byte targetId, Discovery baseMessage)
 		{
 			// create final message
-			byte[] finalMessage = new byte[MessageHelper.FullMessageSize];
-			finalMessage[0] = targetId;
-			finalMessage[1] = ServerId;
-			
-			// insert unencrypted message into final message
-			Array.Copy(baseMessage.ToBytes(), 0, finalMessage, MessageHelper.HeaderSizeWithoutContentLengthSize, MessageHelper.MessageWithContentSize); // TODO fix
-			
+			byte[] buffer = [targetId, ServerId, .. new byte[MessageHelper.NonceSize + MessageHelper.TagSize], ..baseMessage.ToBytes()];
+			ReadOnlyMemory<byte> finalMessage = buffer;
 			// send 
 			await SendToClient(targetId, finalMessage);
 		}
@@ -245,7 +245,7 @@ namespace SODT_Server
 			}
 			else
 			{
-				//This case should never happen because the CLI always checks and requests, if neccessary, a key exchange before sending a message.
+				//This case should never happen because the CLI always checks and requests, if necessary, a key exchange before sending a message.
 				SmartConsole.WriteLine($"No key for target client {targetId} to encrypt with. How do you even get here?");
 				throw new InvalidOperationException("No key for target client to encrypt with.");
 			}
@@ -271,18 +271,28 @@ namespace SODT_Server
 		
 		/// <summary>
 		/// Disconnects a client from the server.
+		/// Sends an updated client list to all connected clients after the disconnection.
 		/// </summary>
 		/// <param name="clientId">Client to disconnect</param>
-		/// <param name="disconnect">Disconnect message</param>
 		/// <returns></returns>
-		private async Task DisconnectClient(byte clientId, Disconnect disconnect)
+		private async Task DisconnectClientInternal(byte clientId)
 		{
 			//dispose client
 			if (clients.TryGetValue(clientId, out TcpClient? client))
-				client.Dispose();
+				client.Close();
+			if (ecdhSessionKeyGenerators.TryGetValue(clientId, out ECDiffieHellman? ecdh))
+				ecdh.Dispose();
+			if (aesSessionKeys.TryGetValue(clientId, out AesGcm? aes))
+				aes.Dispose();
+
 			//remove client from dictionaries
 			_ = clients.Remove(clientId);
+			_ = ecdhSessionKeyGenerators.Remove(clientId);
+			_ = aesSessionKeys.Remove(clientId);
+			_ = pingPongTimers.Remove(clientId);
 			SmartConsole.WriteLine($"{clientId} disconnected from server.");
+			SmartConsole.WriteLine("Update client list for all clients.");
+			await SendListToAllClients();
 		}
 
 		/// <summary>

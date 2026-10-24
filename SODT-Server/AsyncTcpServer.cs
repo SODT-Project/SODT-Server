@@ -56,14 +56,17 @@ namespace SODT_Server
 						continue;
 					}
 					// Find next available client ID (2-255) for the new client.
-					// This loop will always find an available ID because the server is not full.
-					for (byte i = 2; i < byte.MaxValue; i++)
+					// This loop will always find an available ID because the server is not full as checked above.
+					for (byte i = 1; i < byte.MaxValue; i++)
 					{
-						if (!clients.ContainsKey(i))
-						{
-							clientId = i;
-							break;
-						}
+						// Explanation of the formula:
+						// Dont use a simple for loop because it could assign a ID from a recently disconnected client to a new client, which could cause confusion for other clients that still have the old client/old session keys.
+						// Use a continuous incrementing counter to assign IDs, so that new clients always get a new ID and old IDs are not reused until the counter wraps around.
+						// use modulo to wrap around the counter when it reaches the maximum value of a byte (255).
+						clientId = (byte)((clientId + i) % byte.MaxValue);
+						clientId = Math.Max((byte)2, clientId); // ensure that the ID is always in the range of 2-255
+
+						if (!clients.ContainsKey(clientId)) break;
 					}
 					
 					// Add the new client to the dictionary of connected clients.

@@ -67,23 +67,12 @@ namespace SODT_Server.SODT_Common
 			return aes;
 		}
 		
-		/// <summary>
-		/// Compares the session password hash of the client with own public session password hash.
-		/// </summary>
-		/// <param name="ownPublicSessionPasswordHash"> The public session password hash of the current client.</param>
-		/// <param name="remotePublicSessionPasswordHash"> The public session password hash of the other client.</param>
-		/// <returns> <see langword="true"/> if the session password hash matches, otherwise <see langword="false"/>.</returns>
-		public static bool DoesSessionHashMatch(byte[]? ownPublicSessionPasswordHash, byte[]? remotePublicSessionPasswordHash) // TODO return StatusCode?
+		public static string GetSharedPhrase(ECDiffieHellman ownPublicKey, byte[] remotePublicKey)
 		{
-			// both session password hashes are null, no session password is set for authentication
-			if (ownPublicSessionPasswordHash == null && remotePublicSessionPasswordHash == null)
-				return true;
-			
-			//exactly one of the session password hashes is null
-			if ((ownPublicSessionPasswordHash == null) ^ (remotePublicSessionPasswordHash == null))
-				return false;
-			
-			return ownPublicSessionPasswordHash.SequenceEqual(remotePublicSessionPasswordHash);
+			var otherPublicKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+			otherPublicKey.ImportSubjectPublicKeyInfo(remotePublicKey, out _);
+			byte[] derivedKey = ownPublicKey.DeriveKeyFromHash(otherPublicKey.PublicKey, HashAlgorithmName.SHA256);
+			return $"{derivedKey[0]:X2}-{derivedKey[4]:X2}-{derivedKey[8]:X2}-{derivedKey[16]:X2}-{derivedKey[31]:X2}";
 		}
 	}
 }

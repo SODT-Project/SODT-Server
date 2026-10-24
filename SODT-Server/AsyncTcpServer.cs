@@ -195,7 +195,8 @@ namespace SODT_Server
 				if ((DateTime.Now - lastPing).TotalSeconds < 10)
 					continue;
 				SmartConsole.WriteLine($"Client {clientId} is AFK for more than 10 seconds. Disconnecting client.");
-				await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
+				if (aesSessionKeys.TryGetValue(clientId, out _))
+					await SendToClientEncrypted(clientId, Disconnect.CreateRequest());
 				await DisconnectClientInternal(clientId);
 			}
 		}

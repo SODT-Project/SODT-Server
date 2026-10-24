@@ -273,53 +273,33 @@ namespace SODT_Server.SODT_Common
 		/// </summary>
 		[JsonPropertyName("key")]
 		public byte[] Key { get; init; }
-
-		/// <summary>
-		/// Gets or sets the session hash used to verify the integrity of the key exchange.
-		/// </summary>
-		[JsonPropertyName("sessionHash")]
-		public byte[]? SessionHash { get; init; }
 		
-		/// <summary>
-		/// Gets or sets the certificate of the client.
-		/// </summary>
-		[JsonPropertyName("certificate")]
-		public byte[] Certificate { get; init; }
-		
-		
-
 		/// <summary>
 		/// Generate a new key exchange message with the specified properties and new UUID.
 		/// </summary>
 		/// <param name="code"></param>
 		/// <param name="key"></param>
-		/// <param name="sessionHash"></param>
-		/// <param name="certificate">The certificate of the client.</param>
-		private KeyExchange(PacketCode code, byte[] key, byte[] certificate, byte[]? sessionHash)
+		private KeyExchange(PacketCode code, byte[] key)
 		{
 			Uuid = new Random().Next();
 			Code = (int)code;
 			Type = "exchange";
 			Key = key;
-			SessionHash = sessionHash;
-			Certificate = certificate;
 		}
-		private KeyExchange(int uuid, PacketCode code, byte[] key, byte[] certificate, byte[]? sessionHash)
+		private KeyExchange(int uuid, PacketCode code, byte[] key)
 		{
 			Uuid = uuid;
 			Code = (int)code;
 			Type = "exchange";
 			Key = key;
-			SessionHash = sessionHash;
-			Certificate = certificate;
 		}
-		public static KeyExchange CreateRequest(byte[] key, byte[] certificate, byte[]? sessionHash)
+		public static KeyExchange CreateRequest(byte[] key)
 		{
-			return new KeyExchange(PacketCode.Request, key, certificate, sessionHash);
+			return new KeyExchange(PacketCode.Request, key);
 		}
-		public static KeyExchange CreateResponse(byte[] key, byte[] certificate, byte[]? sessionHash)
+		public static KeyExchange CreateResponse(byte[] key)
 		{
-			return new KeyExchange(PacketCode.Ok, key, certificate, sessionHash);
+			return new KeyExchange(PacketCode.Ok, key);
 		}
 		
 		public static KeyExchange CreateError(KeyExchange keyExchange)
@@ -327,9 +307,7 @@ namespace SODT_Server.SODT_Common
 			return new KeyExchange(
 				keyExchange.Uuid,
 				PacketCode.Error,
-				keyExchange.Key,
-				keyExchange.Certificate,
-				keyExchange.SessionHash
+				keyExchange.Key
 			);
 		}
 		
@@ -338,9 +316,7 @@ namespace SODT_Server.SODT_Common
 			return new KeyExchange(
 				keyExchange.Uuid,
 				PacketCode.Denied,
-				keyExchange.Key,
-				keyExchange.Certificate,
-				keyExchange.SessionHash
+				keyExchange.Key
 			);
 		}
 		

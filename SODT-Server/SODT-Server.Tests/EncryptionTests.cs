@@ -136,36 +136,5 @@ namespace SODT_Server.Tests
 					encryptedMessage,
 					new byte[MessageHelper.MessageWithContentSize]));
 		}
-
-		[Theory]
-		[InlineData(true, false, true)]
-		[InlineData(false, false, false)]
-		[InlineData(false, true, true)]
-		public void DoesSessionHashMatch_ComparesHashesCorrectly(
-			bool hashesAreEqual,
-			bool useNullHashes,
-			bool expectedResult)
-		{
-			byte[]? ownHash = useNullHashes ? null : [1, 2, 3];
-			byte[]? remoteHash = useNullHashes
-				? null
-				: hashesAreEqual ? [1, 2, 3] : [1, 2, 4];
-
-			Assert.Equal(expectedResult, EncryptionHandler.DoesSessionHashMatch(ownHash, remoteHash));
-		}
-
-		[Fact]
-		public void DoesSessionHashMatch_WithOnlyOneNullHash_ReturnsFalse()
-		{
-			Assert.False(EncryptionHandler.DoesSessionHashMatch(null, [1, 2, 3]));
-			Assert.False(EncryptionHandler.DoesSessionHashMatch([1, 2, 3], null));
-		}
-
-		[Fact]
-		public void DoesSessionHashMatch_WithDifferentLengthHashes_ReturnsFalse()
-		{
-			Assert.False(EncryptionHandler.DoesSessionHashMatch([1, 2], [1, 2, 0]));
-		}
-
 	}
 }

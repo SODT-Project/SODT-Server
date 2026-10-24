@@ -38,7 +38,7 @@ namespace SODT_Server
 			SmartConsole.WriteLine($"Server started on {ipAddress}:{port}");
 
 			// Initialize a counter to generate unique client IDs.
-			byte clientId = 2;
+			byte clientId = 0;
 
 			// Listen for incoming client connections in an infinite loop.
 			while (true)
@@ -48,10 +48,12 @@ namespace SODT_Server
 					var client = await listener.AcceptTcpClientAsync();
 
 					// handle full server:
-					while (clients.Count >= byte.MaxValue - 1)
+					if (clients.Count >= byte.MaxValue - 2) // 2-255 are valid client IDs, 0 is reserved and 1 is the server ID
 					{
+						clients[0] = client; // temporarily add the client to the dictionary to send a deny message
 						SmartConsole.WriteLine("Server is full. Blocking new connections until a client disconnects.");
-						await Task.Delay(1000);
+						await HandleClientAsync(0);
+						continue;
 					}
 					// Find next available client ID (2-255) for the new client.
 					// This loop will always find an available ID because the server is not full.
@@ -139,7 +141,7 @@ namespace SODT_Server
 			switch (message)
 			{
 				case Discovery discovery:
-					bool isDiscoverySuccessful = await HandleDiscovery(clientId, discovery);
+					bool isDiscoverySuccessful = await HandleDiscovery(clientId, discovery, clientId == 0); // deny discovery if clientId is 0 (server is full)
 					if (isDiscoverySuccessful)
 						await SendListToAllClients();
 					else
@@ -255,7 +257,7 @@ namespace SODT_Server
 			await SendToClient(targetId, toSend);
 		}
 		
-		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery)
+		private async Task<bool> HandleDiscovery(byte clientId, Discovery discovery, bool denyDiscovery = false)
 		{
 			// create new ecdh session key generator for this client
 			ecdhSessionKeyGenerators[clientId] = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
@@ -266,7 +268,15 @@ namespace SODT_Server
 			
 			// sign the discovery message with the server certificate and send it back to the client
 			byte[] toSign = [..discovery.PublicKey, ..serverSessionPublicKey, clientId];
-			await SendToClientUnencrypted(clientId, Discovery.CreateResponse(clientId,serverSessionPublicKey,serverCertificate.SignData(toSign, HashAlgorithmName.SHA256)));
+			byte[] singed = serverCertificate.SignData(toSign, HashAlgorithmName.SHA256);
+			if (denyDiscovery)
+			{
+				await SendToClientUnencrypted(clientId, Discovery.CreateDenied(serverSessionPublicKey, singed));
+				return false;
+			}
+			else
+				await SendToClientUnencrypted(clientId, Discovery.CreateResponse(clientId,serverSessionPublicKey,singed));
+			
 			return true;
 		}
 		

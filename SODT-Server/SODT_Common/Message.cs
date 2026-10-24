@@ -187,6 +187,11 @@ namespace SODT_Server.SODT_Common
 			return new Discovery(PacketCode.Ok, assignedId, publicKeyServer, signature);
 		}
 
+		public static Discovery CreateDenied(byte[] publicKeyServer, byte[] signature)
+		{
+			return new Discovery(PacketCode.Denied, 0, publicKeyServer, signature);
+		}
+
 		public string ToJson()
 		{
 			return JsonSerializer.Serialize(this);

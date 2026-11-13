@@ -175,7 +175,6 @@ namespace SODT_Server
 			switch(pingPong.Code)
 			{
 				case (int)PacketCode.Request:
-					SmartConsole.WriteLine($"Received Ping from client {clientId}");
 					pingPongTimers[clientId] = DateTime.Now;
 					await SendToClientEncrypted(clientId, PingPong.CreateResponse());
 					break;

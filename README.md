@@ -22,8 +22,30 @@ data. Data is relayed only while the clients are connected.
 ## Run with Docker Compose
 
 Make sure [Docker](https://docs.docker.com/get-docker/) and Docker Compose are
-installed. From the repository root, run:
+installed. 
 
+The server's ECDSA certificates are stored in the
+`sodt-certificates` Docker volume, so they persist across container restarts.
+
+**Example compose.yaml file**
+```docker
+﻿services:
+  sodt-server:
+    image: ghcr.io/sodt-project/sodt-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "45645:45645"
+    volumes:
+      - sodt-certificates:/app/certs
+    restart: unless-stopped
+
+volumes:
+  sodt-certificates:
+```
+
+You can also run it from the repository root:
 ```bash
 cd SODT-Server
 docker compose up -d --build
@@ -40,6 +62,3 @@ To stop the server:
 ```bash
 docker compose down
 ```
-
-The server's ECDSA certificates are stored in the
-`sodt-certificates` Docker volume, so they persist across container restarts.

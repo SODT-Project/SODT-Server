@@ -1,22 +1,19 @@
-# SODT Server
+# SODT-Server
 
-The SODT Server is the meeting point for clients using the SODT protocol. A
+The SODT-Server is the meeting point for clients using the SODT-Protocol. A
 client connects to the server so it can find other clients. 
-The server then relays packets between the two clients.
+The server then relays sent packets between the two clients.
 
-The server is not a storage service: it does not save, inspect, or retain sent
+The server is not a storage service: It does not save, inspect, or retain sent
 data. Data is relayed only while the clients are connected.
 
 ## How it works
-
 1. Clients connect to the server and authenticate its identity.
 2. The server helps the clients find each other by sending a `ClientList`-Package
 3. Encrypted packets are relayed between the clients.
-4. Clients can disconnect when they are finished. Otherwise the Server disconnects Clients automatically that stop sending
-   periodic pings.
+4. Clients can disconnect when they are finished. Otherwise the Server disconnects Clients automatically that stop sending periodic pings.
 
 ## Features
-
 - Supports connections and disconnections of SODT-Clients.
 - The Server uses ECDSA to prove the server's authenticity to connecting clients.
 - The connection between the Server and a client is encrpyted with AES-GCM.

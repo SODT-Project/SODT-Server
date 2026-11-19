@@ -4,8 +4,9 @@ The SODT-Server is the meeting point for clients using the SODT-Protocol. A
 client connects to the server so it can find other clients. 
 The server then relays sent packets between the two clients.
 
-The server is not a storage service: It does not save, inspect, or retain sent
-data. Data is relayed only while the clients are connected.
+Since the messages between the clients are E2E-encrpted the server can't read the content of the messages. 
+Furthermore the server does not store, inspect, or retain sent data. 
+Data is relayed only as long as the clients are connected.
 
 ## How it works
 1. Clients connect to the server and authenticate its identity.

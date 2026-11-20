@@ -33,9 +33,6 @@ The server's ECDSA certificates are stored in the
 ﻿services:
   sodt-server:
     image: ghcr.io/sodt-project/sodt-server:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
     ports:
       - "45645:45645"
     volumes:

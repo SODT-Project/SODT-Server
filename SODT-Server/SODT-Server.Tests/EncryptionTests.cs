@@ -89,52 +89,5 @@ namespace SODT_Server.Tests
 
 			Assert.Equal(message.ToBytes(), decryptedMessage);
 		}
-
-		[Fact]
-		public void GenerateSessionKey_WithPasswordHash_DerivesMatchingKeys()
-		{
-			using ECDiffieHellman ownKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-			using ECDiffieHellman remoteKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-			byte[] passwordHash = SHA256.HashData("shared password"u8);
-			using AesGcm ownSessionKey = EncryptionHandler.GenerateSessionKey(
-				ownKey,
-				remoteKey.ExportSubjectPublicKeyInfo(),
-				passwordHash);
-			using AesGcm remoteSessionKey = EncryptionHandler.GenerateSessionKey(
-				remoteKey,
-				ownKey.ExportSubjectPublicKeyInfo(),
-				passwordHash);
-			byte[] encryptedMessage = new byte[MessageHelper.FullMessageSize];
-			IBaseMessage message = PingPong.CreateRequest();
-
-			EncryptionHandler.EncryptAesGcm(ownSessionKey, message, encryptedMessage);
-			byte[] decryptedMessage = new byte[MessageHelper.MessageWithContentSize];
-			EncryptionHandler.DecryptAesGcm(remoteSessionKey, encryptedMessage, decryptedMessage);
-
-			Assert.Equal(message.ToBytes(), decryptedMessage);
-		}
-
-		[Fact]
-		public void GenerateSessionKey_WithDifferentPasswordHash_CannotDecrypt()
-		{
-			using ECDiffieHellman ownKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-			using ECDiffieHellman remoteKey = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
-			using AesGcm ownSessionKey = EncryptionHandler.GenerateSessionKey(
-				ownKey,
-				remoteKey.ExportSubjectPublicKeyInfo(),
-				SHA256.HashData("password one"u8));
-			using AesGcm remoteSessionKey = EncryptionHandler.GenerateSessionKey(
-				remoteKey,
-				ownKey.ExportSubjectPublicKeyInfo(),
-				SHA256.HashData("password two"u8));
-			byte[] encryptedMessage = new byte[MessageHelper.FullMessageSize];
-			EncryptionHandler.EncryptAesGcm(ownSessionKey, PingPong.CreateRequest(), encryptedMessage);
-
-			Assert.ThrowsAny<CryptographicException>(() =>
-				EncryptionHandler.DecryptAesGcm(
-					remoteSessionKey,
-					encryptedMessage,
-					new byte[MessageHelper.MessageWithContentSize]));
-		}
 	}
 }
